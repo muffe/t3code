@@ -1383,6 +1383,10 @@ function releaseChatTimelineAnchor<T extends { readonly messageId: MessageId | n
   return current.messageId === null ? current : { ...current, messageId: null };
 }
 
+/**
+ * Hosts the conversation and composer for a local draft or persisted thread,
+ * using the route's environment for provider data and thread commands.
+ */
 export default function ChatView(props: ChatViewProps) {
   const {
     environmentId,

@@ -2006,6 +2006,10 @@ function LegacyFeaturesSection() {
   );
 }
 
+/**
+ * Edits general preferences through the unified settings hooks, which route
+ * client preferences to local storage and server settings to their environments.
+ */
 export function GeneralSettingsPanel() {
   const settings = usePrimarySettings();
   const updateSettings = useUpdatePrimarySettings();
