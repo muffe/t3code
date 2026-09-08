@@ -88,12 +88,23 @@ try {
     await signForkMacApp(app);
     console.log(`Signed update probe ${version}`);
     if (version === "1.0.1") {
-      NodeChildProcess.execFileSync("ditto", ["-c", "-k", "--keepParent", app, archive]);
+      console.log("Creating update ZIP");
+      NodeChildProcess.execFileSync(
+        "ditto",
+        ["-c", "-k", "--zlibCompressionLevel", "0", "--keepParent", app, archive],
+        { timeout: 120_000, stdio: "inherit" },
+      );
+      console.log("Created update ZIP");
     }
   }
   // The installed app must authenticate updates without the build runner's
   // explicit trust setting. Restore it afterwards for packaging T3 itself.
-  NodeChildProcess.execFileSync("sudo", ["security", "remove-trusted-cert", "-d", certificate]);
+  console.log("Removing explicit certificate trust");
+  NodeChildProcess.execFileSync(
+    "sudo",
+    ["-n", "security", "remove-trusted-cert", "-d", certificate],
+    { timeout: 30_000, stdio: "inherit" },
+  );
   removedTrust = true;
   console.log("Starting native update without explicit certificate trust");
   child = NodeChildProcess.spawn(
@@ -121,17 +132,22 @@ try {
   server.closeAllConnections();
   server.close();
   if (removedTrust) {
-    NodeChildProcess.execFileSync("sudo", [
-      "security",
-      "add-trusted-cert",
-      "-d",
-      "-r",
-      "trustRoot",
-      "-p",
-      "codeSign",
-      "-k",
-      process.env.T3CODE_FORK_MAC_SIGNING_KEYCHAIN,
-      certificate,
-    ]);
+    NodeChildProcess.execFileSync(
+      "sudo",
+      [
+        "-n",
+        "security",
+        "add-trusted-cert",
+        "-d",
+        "-r",
+        "trustRoot",
+        "-p",
+        "codeSign",
+        "-k",
+        process.env.T3CODE_FORK_MAC_SIGNING_KEYCHAIN,
+        certificate,
+      ],
+      { timeout: 30_000, stdio: "inherit" },
+    );
   }
 }
