@@ -84,7 +84,9 @@ try {
       });
     `,
     );
+    console.log(`Signing update probe ${version}`);
     await signForkMacApp(app);
+    console.log(`Signed update probe ${version}`);
     if (version === "1.0.1") {
       NodeChildProcess.execFileSync("ditto", ["-c", "-k", "--keepParent", app, archive]);
     }
@@ -93,6 +95,7 @@ try {
   // explicit trust setting. Restore it afterwards for packaging T3 itself.
   NodeChildProcess.execFileSync("sudo", ["security", "remove-trusted-cert", "-d", certificate]);
   removedTrust = true;
+  console.log("Starting native update without explicit certificate trust");
   child = NodeChildProcess.spawn(
     NodePath.join(directory, "1.0.0/Fork Update Probe.app/Contents/MacOS/Electron"),
     [],

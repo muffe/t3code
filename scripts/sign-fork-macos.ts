@@ -20,11 +20,7 @@ export async function signForkMacApp(app: string): Promise<void> {
     batchCodesignCalls: true,
     optionsForFile: () => ({
       timestamp: "none",
-      entitlements: [
-        "com.apple.security.cs.allow-jit",
-        "com.apple.security.cs.allow-unsigned-executable-memory",
-        "com.apple.security.cs.disable-library-validation",
-      ],
+      entitlements: NodePath.join(import.meta.dirname, "fork-macos.entitlements.plist"),
     }),
   });
 }

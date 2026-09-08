@@ -250,6 +250,9 @@ jobs:
           rm "$certificate_path"
 
       - name: Verify native update between two self-signed versions
+        timeout-minutes: 10
+        env:
+          DEBUG: electron-osx-sign*
         run: node scripts/test-fork-macos-update.mjs
 
       - name: Align package versions
