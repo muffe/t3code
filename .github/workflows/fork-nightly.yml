@@ -295,6 +295,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.sync.outputs.sha }}
+          sparse-checkout: .github
+          ssh-key: ${{ secrets.FORK_SYNC_SSH_KEY }}
+
       - uses: actions/download-artifact@v8
         with:
           pattern: fork-*-nightly
@@ -310,8 +316,12 @@ jobs:
           BUILD_SHA: ${{ needs.sync.outputs.sha }}
         run: |
           set -euo pipefail
+          # The deploy key can tag commits containing workflow changes, including
+          # when main has advanced while the platform builds were running.
+          git tag "$RELEASE_TAG" "$BUILD_SHA"
+          git push origin "refs/tags/$RELEASE_TAG"
           # A draft keeps the updater from seeing a partially uploaded release.
-          gh release create "$RELEASE_TAG" --draft --prerelease --latest=false --target "$BUILD_SHA" --title "T3 Code Fork Nightly $RELEASE_VERSION" --notes "Windows x64 and macOS arm64 build of $GH_REPO at $BUILD_SHA. Includes this fork's customizations. Windows installer is unsigned. macOS is self-signed and not notarized."
+          gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease --latest=false --title "T3 Code Fork Nightly $RELEASE_VERSION" --notes "Windows x64 and macOS arm64 build of $GH_REPO at $BUILD_SHA. Includes this fork's customizations. Windows installer is unsigned. macOS is self-signed and not notarized."
           gh release upload "$RELEASE_TAG" release/*
           gh release edit "$RELEASE_TAG" --draft=false
           echo "Nightly: https://github.com/$GH_REPO/releases/tag/$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
