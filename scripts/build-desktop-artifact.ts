@@ -2709,7 +2709,13 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   if (platform === "mac") {
     const path = yield* Path.Path;
     const repoRoot = yield* RepoRoot;
+    // Personal fork certificates do not carry Apple's passkey entitlements.
+    const forkSigning = !signed && Boolean(process.env.T3CODE_FORK_MAC_SIGNING_IDENTITY);
+    if (forkSigning) {
+      buildConfig.afterPack = path.join(repoRoot, "scripts/sign-fork-macos.ts");
+    }
     buildConfig.mac = {
+      ...(forkSigning ? { identity: null, notarize: false } : {}),
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
       category: "public.app-category.developer-tools",

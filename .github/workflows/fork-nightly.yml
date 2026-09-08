@@ -1,4 +1,4 @@
-name: Fork Windows Nightly
+name: Fork Desktop Nightly
 
 on:
   schedule:
@@ -76,6 +76,9 @@ jobs:
     if: needs.sync.outputs.build == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -92,6 +95,15 @@ jobs:
           run-install: |
             args:
               - --filter=t3...
+
+      - name: Set nightly version
+        id: version
+        shell: bash
+        env:
+          BUILD_SHA: ${{ needs.sync.outputs.sha }}
+        run: |
+          set -euo pipefail
+          node scripts/resolve-nightly-release.ts --date "$(date -u +%Y%m%d)" --run-number "$((GITHUB_RUN_NUMBER * 1000 + GITHUB_RUN_ATTEMPT))" --sha "$BUILD_SHA" --github-output
 
       - name: Build Linux node-pty
         run: |
@@ -114,9 +126,6 @@ jobs:
     needs: [sync, wsl]
     runs-on: windows-2022
     timeout-minutes: 60
-    outputs:
-      tag: ${{ steps.version.outputs.tag }}
-      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -158,24 +167,15 @@ jobs:
           name: fork-wsl-node-pty
           path: wsl-prebuild
 
-      - name: Set nightly version
-        id: version
-        shell: bash
-        env:
-          BUILD_SHA: ${{ needs.sync.outputs.sha }}
-        run: |
-          set -euo pipefail
-          node scripts/resolve-nightly-release.ts --date "$(date -u +%Y%m%d)" --run-number "$((GITHUB_RUN_NUMBER * 1000 + GITHUB_RUN_ATTEMPT))" --sha "$BUILD_SHA" --github-output
-
       - name: Align package versions
         env:
-          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_VERSION: ${{ needs.wsl.outputs.version }}
         run: node scripts/update-release-package-versions.ts "$env:BUILD_VERSION"
 
       - name: Build installer and update metadata
         env:
           T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
-          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_VERSION: ${{ needs.wsl.outputs.version }}
         run: vp run dist:desktop:artifact --platform win --target nsis --arch x64 --build-version "$env:BUILD_VERSION" --wsl-prebuild wsl-prebuild/pty.node --verbose
 
       - name: Verify update assets
@@ -195,9 +195,98 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  macos:
+    name: Build macOS Apple Silicon
+    needs: [sync, wsl]
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      T3CODE_FORK_MAC_SIGNING_IDENTITY: T3 Code Fork
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.sync.outputs.sha }}
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: false
+          run-install: false
+
+      - name: Install desktop dependencies
+        run: vp install --filter=@t3tools/desktop... --filter=t3... --filter=@t3tools/scripts...
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Import persistent fork certificate
+        env:
+          CERTIFICATE: ${{ secrets.FORK_MAC_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.FORK_MAC_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$CERTIFICATE"
+          test -n "$CERTIFICATE_PASSWORD"
+          export T3CODE_FORK_MAC_SIGNING_KEYCHAIN="$RUNNER_TEMP/fork-signing.keychain-db"
+          echo "T3CODE_FORK_MAC_SIGNING_KEYCHAIN=$T3CODE_FORK_MAC_SIGNING_KEYCHAIN" >> "$GITHUB_ENV"
+          certificate_path="$RUNNER_TEMP/fork-signing.p12"
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$CERTIFICATE_PASSWORD" "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN"
+          security unlock-keychain -p "$CERTIFICATE_PASSWORD" "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN"
+          security import "$certificate_path" -P "$CERTIFICATE_PASSWORD" -k "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$CERTIFICATE_PASSWORD" "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN" >/dev/null
+          rm "$certificate_path"
+
+      - name: Verify native update between two self-signed versions
+        run: node scripts/test-fork-macos-update.mjs
+
+      - name: Align package versions
+        env:
+          BUILD_VERSION: ${{ needs.wsl.outputs.version }}
+        run: node scripts/update-release-package-versions.ts "$BUILD_VERSION"
+
+      - name: Build signed installer and update metadata
+        env:
+          T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
+          BUILD_VERSION: ${{ needs.wsl.outputs.version }}
+        run: vp run dist:desktop:artifact --platform mac --target dmg --arch arm64 --build-version "$BUILD_VERSION" --verbose
+
+      - name: Verify packaged signature and update assets
+        run: |
+          set -euo pipefail
+          test -f release/nightly-mac.yml
+          mkdir "$RUNNER_TEMP/fork-packaged"
+          ditto -x -k release/*-arm64.zip "$RUNNER_TEMP/fork-packaged"
+          codesign --verify --deep --strict --all-architectures "$RUNNER_TEMP/fork-packaged/"*.app
+          codesign -d -r- "$RUNNER_TEMP/fork-packaged/"*.app
+          ls release/*-arm64.dmg release/*-arm64.zip
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fork-macos-nightly
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.blockmap
+            release/nightly-mac.yml
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove signing keychain
+        if: always()
+        run: |
+          security delete-keychain "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN" || true
+          rm -f "$RUNNER_TEMP/fork-signing.p12"
+
   publish:
     name: Publish fork nightly
-    needs: [sync, windows]
+    needs: [sync, wsl, windows, macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -205,20 +294,21 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: fork-windows-nightly
+          pattern: fork-*-nightly
+          merge-multiple: true
           path: release
 
       - name: Publish complete release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ needs.windows.outputs.tag }}
-          RELEASE_VERSION: ${{ needs.windows.outputs.version }}
+          RELEASE_TAG: ${{ needs.wsl.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.wsl.outputs.version }}
           BUILD_SHA: ${{ needs.sync.outputs.sha }}
         run: |
           set -euo pipefail
           # A draft keeps the updater from seeing a partially uploaded release.
-          gh release create "$RELEASE_TAG" --draft --prerelease --latest=false --target "$BUILD_SHA" --title "T3 Code Fork Nightly $RELEASE_VERSION" --notes "Windows x64 build of $GH_REPO at $BUILD_SHA. Includes this fork's customizations. Unsigned installer."
+          gh release create "$RELEASE_TAG" --draft --prerelease --latest=false --target "$BUILD_SHA" --title "T3 Code Fork Nightly $RELEASE_VERSION" --notes "Windows x64 and macOS arm64 build of $GH_REPO at $BUILD_SHA. Includes this fork's customizations. Windows installer is unsigned. macOS is self-signed and not notarized."
           gh release upload "$RELEASE_TAG" release/*
           gh release edit "$RELEASE_TAG" --draft=false
           echo "Nightly: https://github.com/$GH_REPO/releases/tag/$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
