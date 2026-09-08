@@ -37,6 +37,8 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 let child;
 let timer;
+let removedTrust = false;
+const certificate = NodePath.join(process.env.RUNNER_TEMP, "fork-signing.pem");
 try {
   for (const version of ["1.0.0", "1.0.1"]) {
     const app = NodePath.join(directory, version, "Fork Update Probe.app");
@@ -87,6 +89,10 @@ try {
       NodeChildProcess.execFileSync("ditto", ["-c", "-k", "--keepParent", app, archive]);
     }
   }
+  // The installed app must authenticate updates without the build runner's
+  // explicit trust setting. Restore it afterwards for packaging T3 itself.
+  NodeChildProcess.execFileSync("sudo", ["security", "remove-trusted-cert", "-d", certificate]);
+  removedTrust = true;
   child = NodeChildProcess.spawn(
     NodePath.join(directory, "1.0.0/Fork Update Probe.app/Contents/MacOS/Electron"),
     [],
@@ -111,4 +117,18 @@ try {
   if (child && child.exitCode === null) child.kill();
   server.closeAllConnections();
   server.close();
+  if (removedTrust) {
+    NodeChildProcess.execFileSync("sudo", [
+      "security",
+      "add-trusted-cert",
+      "-d",
+      "-r",
+      "trustRoot",
+      "-p",
+      "codeSign",
+      "-k",
+      process.env.T3CODE_FORK_MAC_SIGNING_KEYCHAIN,
+      certificate,
+    ]);
+  }
 }
