@@ -241,7 +241,11 @@ jobs:
           security set-keychain-settings -lut 21600 "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN"
           security unlock-keychain -p "$CERTIFICATE_PASSWORD" "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN"
           security import "$certificate_path" -P "$CERTIFICATE_PASSWORD" -k "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN" -T /usr/bin/codesign
+          security list-keychains -d user -s "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN" "$HOME/Library/Keychains/login.keychain-db"
+          security find-certificate -c "$T3CODE_FORK_MAC_SIGNING_IDENTITY" -p "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN" > "$RUNNER_TEMP/fork-signing.pem"
+          security add-trusted-cert -r trustRoot -p codeSign -k "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN" "$RUNNER_TEMP/fork-signing.pem"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$CERTIFICATE_PASSWORD" "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN" >/dev/null
+          security find-identity -v -p codesigning "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN"
           rm "$certificate_path"
 
       - name: Verify native update between two self-signed versions
