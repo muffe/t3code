@@ -49,17 +49,16 @@ as `FORK_MAC_CERTIFICATE_PASSWORD` in repository Actions secrets. The certificat
 common name is `T3 Code Fork`; keep the certificate and private key across builds.
 Replacing them can prevent existing installations from accepting updates.
 
-The Mac job imports the certificate into a temporary keychain, tests an actual
-Electron/Squirrel update and relaunch between two fixture versions, then signs
-T3 before creating its DMG and ZIP. It verifies the packaged app again and deletes
-the temporary keychain. No Apple account, notarization, or Associated Domains
+The Mac job imports the certificate into a temporary keychain and signs T3
+before creating its DMG and ZIP. It verifies the packaged app and deletes the
+temporary keychain. No Apple account, notarization, or Associated Domains
 provisioning profile is used. The fork signing hook does not disable Squirrel's
 signature verification.
 
 Install the arm64 DMG manually once and keep the channel on **Nightly**.
 The app is not notarized: macOS may require explicit approval in Privacy &
-Security before its first launch. The CI update test does not reproduce this
-Gatekeeper first-launch flow on a user's Mac. The official installation cannot
+Security before its first launch. The packaged signature check does not reproduce this Gatekeeper first-launch
+flow on a user's Mac. The official installation cannot
 update directly to our different signing identity.
 
 Mac updates require the ZIP and `nightly-mac.yml`; the DMG is for installation.

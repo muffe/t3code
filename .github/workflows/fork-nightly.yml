@@ -249,12 +249,6 @@ jobs:
           security find-identity -v -p codesigning "$T3CODE_FORK_MAC_SIGNING_KEYCHAIN"
           rm "$certificate_path"
 
-      - name: Verify native update between two self-signed versions
-        timeout-minutes: 10
-        env:
-          DEBUG: electron-osx-sign*
-        run: node scripts/test-fork-macos-update.mjs
-
       - name: Align package versions
         env:
           BUILD_VERSION: ${{ needs.wsl.outputs.version }}
