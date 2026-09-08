@@ -45,7 +45,7 @@ export function UsageLimitsBar({
         {report.accounts.map((account) => {
           const notice = limitsNotice(account.limits);
           return (
-            <div key={account.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-0.5">
+            <div key={account.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-0.5">
               {report.accounts.length > 1 ? (
                 <RedactedSensitiveText
                   value={account.displayName || account.email || account.id}
@@ -62,9 +62,12 @@ export function UsageLimitsBar({
                   const remaining = remainingPercent(window);
                   const reset = formatResetsIn(window, now);
                   return (
-                    <span key={window.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span
+                      key={window.id}
+                      className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5"
+                    >
                       <span>{window.label}</span>
-                      <span aria-hidden className="h-1 w-10 overflow-hidden rounded-full bg-muted">
+                      <span aria-hidden className="h-1 w-8 overflow-hidden rounded-full bg-muted">
                         <span
                           className="block h-full rounded-full"
                           style={{
