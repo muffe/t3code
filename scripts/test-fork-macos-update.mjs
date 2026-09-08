@@ -102,10 +102,30 @@ try {
   console.log("Removing explicit certificate trust");
   NodeChildProcess.execFileSync(
     "sudo",
-    ["-n", "security", "remove-trusted-cert", "-d", certificate],
+    [
+      "-n",
+      "security",
+      "add-trusted-cert",
+      "-d",
+      "-r",
+      "unspecified",
+      "-p",
+      "codeSign",
+      "-k",
+      process.env.T3CODE_FORK_MAC_SIGNING_KEYCHAIN,
+      certificate,
+    ],
     { timeout: 30_000, stdio: "inherit" },
   );
   removedTrust = true;
+  const identities = NodeChildProcess.execFileSync(
+    "security",
+    ["find-identity", "-v", "-p", "codesigning", process.env.T3CODE_FORK_MAC_SIGNING_KEYCHAIN],
+    { encoding: "utf8", timeout: 30_000 },
+  );
+  if (!identities.includes("0 valid identities found")) {
+    throw new Error(`Update probe still has a trusted signing identity: ${identities}`);
+  }
   console.log("Starting native update without explicit certificate trust");
   child = NodeChildProcess.spawn(
     NodePath.join(directory, "1.0.0/Fork Update Probe.app/Contents/MacOS/Electron"),
