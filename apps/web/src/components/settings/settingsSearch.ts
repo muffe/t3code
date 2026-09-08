@@ -215,6 +215,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["command menu dollar $ slash /"],
   },
   {
+    id: "usage-limits-bar",
+    title: "Show usage limits below chat",
+    to: "/settings/general",
+    searchTerms: ["provider quota remaining reset info bar composer usage limits"],
+  },
+  {
     id: "composer-collapse",
     title: "Collapse composer on scroll",
     to: "/settings/general",

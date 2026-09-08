@@ -2344,6 +2344,32 @@ export function GeneralSettingsPanel() {
         />
 
         <SettingsRow
+          {...searchableSetting("usage-limits-bar")}
+          description="Show remaining provider limits and reset times below the chat composer."
+          resetAction={
+            settings.showUsageLimitsBar !== DEFAULT_UNIFIED_SETTINGS.showUsageLimitsBar ? (
+              <SettingResetButton
+                label="usage limits bar"
+                onClick={() =>
+                  updateSettings({
+                    showUsageLimitsBar: DEFAULT_UNIFIED_SETTINGS.showUsageLimitsBar,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.showUsageLimitsBar}
+              onCheckedChange={(checked) =>
+                updateSettings({ showUsageLimitsBar: Boolean(checked) })
+              }
+              aria-label="Show usage limits below chat"
+            />
+          }
+        />
+
+        <SettingsRow
           {...searchableSetting("composer-collapse")}
           description="Rest the composer of an existing thread into a single line when you scroll the conversation. Focus the composer or start typing to expand it again."
           resetAction={

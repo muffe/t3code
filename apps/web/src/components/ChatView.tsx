@@ -7,6 +7,7 @@ import {
 } from "@t3tools/shared/usageLimits";
 import { feedbackBannerItem } from "./chat/ComposerFeedback";
 import { usageLimitsBannerItem } from "./chat/ComposerUsageLimits";
+import { UsageLimitsBar } from "./chat/UsageLimitsBar";
 import { derivePendingRequests } from "@t3tools/client-runtime/pending-requests";
 import {
   questionAttachmentDraftId,
@@ -8493,6 +8494,16 @@ export default function ChatView(props: ChatViewProps) {
                         </div>
                       </div>
                     </ComposerSurface.Shell>
+                    {settings.showUsageLimitsBar &&
+                    activeProviderInstanceId !== null &&
+                    !activeEnvironmentUnavailable ? (
+                      <UsageLimitsBar
+                        key={`${environmentId}:${activeProviderInstanceId}`}
+                        instanceId={activeProviderInstanceId}
+                        providers={providerStatuses}
+                        sources={usageLimitSources}
+                      />
+                    ) : null}
                     <div
                       aria-hidden
                       className="h-[calc(env(safe-area-inset-bottom)+1rem)] sm:h-[calc(env(safe-area-inset-bottom)+1.25rem)]"
