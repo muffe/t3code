@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - electron-builder invokes this native Promise hook outside Effect.
 import * as NodePath from "node:path";
 import { sign as signApplication } from "@electron/osx-sign";
 
