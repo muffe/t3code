@@ -61,7 +61,12 @@ jobs:
               gh api --method PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/disable"
             done
           sha="$(git rev-parse HEAD)"
-          last_sha="$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[] | select(.prerelease and (.draft | not) and (.tag_name | contains("-nightly.")))][0].target_commitish // ""')"
+          last_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[] | select(.prerelease and (.draft | not) and (.tag_name | contains("-nightly.")))][0].tag_name // ""')"
+          last_sha=""
+          if [[ -n "$last_tag" ]]; then
+            git fetch --no-tags origin "refs/tags/$last_tag"
+            last_sha="$(git rev-parse 'FETCH_HEAD^{commit}')"
+          fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           if [[ "$FORCE_BUILD" == "true" || "$sha" != "$last_sha" ]]; then
             echo "build=true" >> "$GITHUB_OUTPUT"
