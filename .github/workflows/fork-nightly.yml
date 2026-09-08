@@ -33,6 +33,10 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
           ssh-key: ${{ secrets.FORK_SYNC_SSH_KEY }}
 
       - name: Merge upstream and select build
@@ -77,6 +81,10 @@ jobs:
         with:
           ref: ${{ needs.sync.outputs.sha }}
           persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
 
       - uses: voidzero-dev/setup-vp@v1
         with:
@@ -115,6 +123,10 @@ jobs:
         with:
           ref: ${{ needs.sync.outputs.sha }}
           persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
 
       - uses: voidzero-dev/setup-vp@v1
         with:
