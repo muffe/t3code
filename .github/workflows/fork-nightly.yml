@@ -1,0 +1,214 @@
+name: Fork Windows Nightly
+
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even when the source matches the last published nightly
+        type: boolean
+        default: false
+
+concurrency:
+  group: fork-windows-nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: github.repository == 'muffe/t3code'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
+    outputs:
+      sha: ${{ steps.sync.outputs.sha }}
+      build: ${{ steps.sync.outputs.build }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          ssh-key: ${{ secrets.FORK_SYNC_SSH_KEY }}
+
+      - name: Merge upstream and select build
+        id: sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE_BUILD: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags https://github.com/pingdotgg/t3code.git main
+          if ! git merge --no-ff -m "Merge upstream main [skip ci]" FETCH_HEAD; then
+            git merge --abort
+            echo "::error::Upstream conflicts with this fork. Resolve the merge locally and rerun this workflow."
+            exit 1
+          fi
+          git push origin HEAD:main
+          # Fork releases do not use upstream's hosted runners or publishers.
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows" --paginate --jq '.workflows[] | select(.path != ".github/workflows/fork-nightly.yml" and .state == "active") | .id' |
+            while read -r workflow_id; do
+              gh api --method PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/disable"
+            done
+          sha="$(git rev-parse HEAD)"
+          last_sha="$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[] | select(.prerelease and (.draft | not) and (.tag_name | contains("-nightly.")))][0].target_commitish // ""')"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [[ "$FORCE_BUILD" == "true" || "$sha" != "$last_sha" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "The latest nightly already contains $sha." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  wsl:
+    name: Build WSL terminal helper
+    needs: sync
+    if: needs.sync.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.sync.outputs.sha }}
+          persist-credentials: false
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=t3...
+
+      - name: Build Linux node-pty
+        run: |
+          set -euo pipefail
+          pty_pkg="$(node -e "console.log(require.resolve('node-pty/package.json', { paths: [process.cwd() + '/apps/server'] }))")"
+          pty_dir="$(dirname "$pty_pkg")"
+          (cd "$pty_dir" && npx --yes node-gyp rebuild)
+          mkdir -p wsl-prebuild
+          cp "$pty_dir/build/Release/pty.node" wsl-prebuild/pty.node
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fork-wsl-node-pty
+          path: wsl-prebuild/pty.node
+          if-no-files-found: error
+          retention-days: 3
+
+  windows:
+    name: Build Windows x64
+    needs: [sync, wsl]
+    runs-on: windows-2022
+    timeout-minutes: 60
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.sync.outputs.sha }}
+          persist-credentials: false
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: false
+          run-install: false
+
+      - name: Install desktop dependencies
+        run: vp install --filter=@t3tools/desktop... --filter=t3... --filter=@t3tools/scripts...
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install Spectre-mitigated MSVC libraries
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installPath = & $vswhere -products * -latest -property installationPath
+          $setupExe = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $proc = Start-Process -FilePath $setupExe `
+            -ArgumentList "modify", "--installPath", "`"$installPath`"", "--add", `
+            "Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre", "--quiet", "--norestart" `
+            -Wait -PassThru -NoNewWindow
+          if ($null -eq $proc -or $proc.ExitCode -notin @(0, 3010)) {
+            throw "Visual Studio Installer failed: $($proc.ExitCode)"
+          }
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: fork-wsl-node-pty
+          path: wsl-prebuild
+
+      - name: Set nightly version
+        id: version
+        shell: bash
+        env:
+          BUILD_SHA: ${{ needs.sync.outputs.sha }}
+        run: |
+          set -euo pipefail
+          node scripts/resolve-nightly-release.ts --date "$(date -u +%Y%m%d)" --run-number "$((GITHUB_RUN_NUMBER * 1000 + GITHUB_RUN_ATTEMPT))" --sha "$BUILD_SHA" --github-output
+
+      - name: Align package versions
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+        run: node scripts/update-release-package-versions.ts "$env:BUILD_VERSION"
+
+      - name: Build installer and update metadata
+        env:
+          T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+        run: vp run dist:desktop:artifact --platform win --target nsis --arch x64 --build-version "$env:BUILD_VERSION" --wsl-prebuild wsl-prebuild/pty.node --verbose
+
+      - name: Verify update assets
+        shell: pwsh
+        run: |
+          if (!(Test-Path release/nightly.yml)) { throw "Missing nightly.yml update feed" }
+          if (!(Get-ChildItem release/*.exe)) { throw "Missing Windows installer" }
+          if (!(Get-ChildItem release/*.blockmap)) { throw "Missing differential update blockmap" }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fork-windows-nightly
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/nightly.yml
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish fork nightly
+    needs: [sync, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: fork-windows-nightly
+          path: release
+
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.windows.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.windows.outputs.version }}
+          BUILD_SHA: ${{ needs.sync.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # A draft keeps the updater from seeing a partially uploaded release.
+          gh release create "$RELEASE_TAG" --draft --prerelease --latest=false --target "$BUILD_SHA" --title "T3 Code Fork Nightly $RELEASE_VERSION" --notes "Windows x64 build of $GH_REPO at $BUILD_SHA. Includes this fork's customizations. Unsigned installer."
+          gh release upload "$RELEASE_TAG" release/*
+          gh release edit "$RELEASE_TAG" --draft=false
+          echo "Nightly: https://github.com/$GH_REPO/releases/tag/$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
