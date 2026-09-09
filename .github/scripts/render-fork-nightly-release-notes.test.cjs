@@ -2,12 +2,11 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { renderReleaseNotes } = require("./render-fork-nightly-release-notes.cjs");
 
-test("lists changes, comparison, source, and signing status", () => {
+test("lists changes and comparison without build details", () => {
   const notes = renderReleaseNotes({
     repository: "muffe/t3code",
     previousTag: "v1.2.3-nightly.20260908.1001",
     buildSha: "96586ba123456789",
-    version: "1.2.3-nightly.20260909.2001",
     commits: [
       {
         subject: "fix(web): keep the composer responsive",
@@ -20,9 +19,7 @@ test("lists changes, comparison, source, and signing status", () => {
   assert.match(notes, /## Changes/);
   assert.match(notes, /fix\(web\): keep the composer responsive/);
   assert.match(notes, /compare\/v1.2.3-nightly.20260908.1001\.\.\.96586ba123456789/);
-  assert.match(notes, /Version: `1.2.3-nightly.20260909.2001`/);
-  assert.match(notes, /Windows x64 installer: unsigned/);
-  assert.match(notes, /macOS arm64 build: self-signed and not notarized/);
+  assert.doesNotMatch(notes, /Build details/);
 });
 
 test("describes a forced rebuild without inventing changes", () => {
@@ -30,7 +27,6 @@ test("describes a forced rebuild without inventing changes", () => {
     repository: "muffe/t3code",
     previousTag: "previous-nightly",
     buildSha: "96586ba123456789",
-    version: "1.2.3-nightly.20260909.2001",
     commits: [],
   });
 
@@ -42,7 +38,6 @@ test("handles the first fork nightly without a comparison", () => {
     repository: "muffe/t3code",
     previousTag: "",
     buildSha: "96586ba123456789",
-    version: "1.2.3-nightly.20260909.2001",
     commits: [],
   });
 

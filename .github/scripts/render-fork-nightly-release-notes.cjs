@@ -9,8 +9,7 @@ function commitUrl(repository, sha) {
   return `https://github.com/${repository}/commit/${sha}`;
 }
 
-function renderReleaseNotes({ repository, previousTag, buildSha, version, commits }) {
-  const shortSha = buildSha.slice(0, 7);
+function renderReleaseNotes({ repository, previousTag, buildSha, commits }) {
   const lines = [];
 
   if (previousTag) {
@@ -38,17 +37,6 @@ function renderReleaseNotes({ repository, previousTag, buildSha, version, commit
     lines.push("First automated nightly published by this fork.");
   }
 
-  lines.push(
-    "",
-    "## Build details",
-    "",
-    `- Version: \`${version}\``,
-    `- Source: [\`${shortSha}\`](${commitUrl(repository, buildSha)})`,
-    "- Windows x64 installer: unsigned",
-    "- macOS arm64 build: self-signed and not notarized",
-    "",
-  );
-
   return lines.join("\n");
 }
 
@@ -70,10 +58,10 @@ function readCommits(previousTag, buildSha) {
 
 function main() {
   const outputPath = process.argv[2];
-  const { GITHUB_REPOSITORY, PREVIOUS_RELEASE_TAG, BUILD_SHA, RELEASE_VERSION } = process.env;
-  if (!outputPath || !GITHUB_REPOSITORY || !BUILD_SHA || !RELEASE_VERSION) {
+  const { GITHUB_REPOSITORY, PREVIOUS_RELEASE_TAG, BUILD_SHA } = process.env;
+  if (!outputPath || !GITHUB_REPOSITORY || !BUILD_SHA) {
     throw new Error(
-      "Usage: render-fork-nightly-release-notes.cjs <output-path> with GITHUB_REPOSITORY, BUILD_SHA, and RELEASE_VERSION set.",
+      "Usage: render-fork-nightly-release-notes.cjs <output-path> with GITHUB_REPOSITORY and BUILD_SHA set.",
     );
   }
 
@@ -84,7 +72,6 @@ function main() {
       repository: GITHUB_REPOSITORY,
       previousTag,
       buildSha: BUILD_SHA,
-      version: RELEASE_VERSION,
       commits: readCommits(previousTag, BUILD_SHA),
     }),
   );

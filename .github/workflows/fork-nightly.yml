@@ -325,7 +325,6 @@ jobs:
         env:
           PREVIOUS_RELEASE_TAG: ${{ needs.sync.outputs.previous_tag }}
           BUILD_SHA: ${{ needs.sync.outputs.sha }}
-          RELEASE_VERSION: ${{ needs.wsl.outputs.version }}
         run: node .github/scripts/render-fork-nightly-release-notes.cjs "$RUNNER_TEMP/fork-nightly-release-notes.md"
 
       - name: Publish complete release
