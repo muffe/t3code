@@ -45,14 +45,17 @@ export function UsageLimitsBar({
         {report.accounts.map((account) => {
           const notice = limitsNotice(account.limits);
           return (
-            <div key={account.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-0.5">
+            <div
+              key={account.id}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 py-0.5"
+            >
               {report.accounts.length > 1 ? (
                 <RedactedSensitiveText
                   value={account.displayName || account.email || account.id}
                   ariaLabel="Toggle account label visibility"
                   revealTooltip="Click to reveal account"
                   hideTooltip="Click to hide account"
-                  className="max-w-32 truncate text-xs"
+                  className="max-w-32 shrink-0 truncate text-xs"
                 />
               ) : null}
               {notice ? (
@@ -64,10 +67,10 @@ export function UsageLimitsBar({
                   return (
                     <span
                       key={window.id}
-                      className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5"
+                      className="flex shrink-0 items-center gap-1.5 whitespace-nowrap"
                     >
                       <span>{window.label}</span>
-                      <span aria-hidden className="h-1 w-8 overflow-hidden rounded-full bg-muted">
+                      <span aria-hidden className="h-1 w-6 overflow-hidden rounded-full bg-muted">
                         <span
                           className="block h-full rounded-full"
                           style={{
@@ -79,7 +82,11 @@ export function UsageLimitsBar({
                       <span className="font-medium text-foreground tabular-nums">
                         {remaining}% left
                       </span>
-                      {reset ? <span className="tabular-nums">{reset}</span> : null}
+                      {reset ? (
+                        <span aria-label={reset} title={reset} className="tabular-nums">
+                          {reset.replace(/^resets in /, "in ")}
+                        </span>
+                      ) : null}
                     </span>
                   );
                 })
