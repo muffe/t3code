@@ -28,6 +28,7 @@ jobs:
     outputs:
       sha: ${{ steps.sync.outputs.sha }}
       build: ${{ steps.sync.outputs.build }}
+      previous_tag: ${{ steps.sync.outputs.previous_tag }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -62,6 +63,7 @@ jobs:
             done
           sha="$(git rev-parse HEAD)"
           last_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[] | select(.prerelease and (.draft | not) and (.tag_name | contains("-nightly.")))][0].tag_name // ""')"
+          echo "previous_tag=$last_tag" >> "$GITHUB_OUTPUT"
           last_sha=""
           if [[ -n "$last_tag" ]]; then
             git fetch --no-tags origin "refs/tags/$last_tag"
@@ -150,6 +152,9 @@ jobs:
       - name: Install desktop dependencies
         run: vp install --filter=@t3tools/desktop... --filter=t3... --filter=@t3tools/scripts...
 
+      - name: Apply fork branding
+        run: node .github/scripts/apply-fork-branding.cjs
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
@@ -225,6 +230,9 @@ jobs:
 
       - name: Install desktop dependencies
         run: vp install --filter=@t3tools/desktop... --filter=t3... --filter=@t3tools/scripts...
+
+      - name: Apply fork branding
+        run: node .github/scripts/apply-fork-branding.cjs
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -303,6 +311,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ needs.sync.outputs.sha }}
+          fetch-depth: 0
           sparse-checkout: .github
           ssh-key: ${{ secrets.FORK_SYNC_SSH_KEY }}
 
@@ -311,6 +320,13 @@ jobs:
           pattern: fork-*-nightly
           merge-multiple: true
           path: release
+
+      - name: Write release notes
+        env:
+          PREVIOUS_RELEASE_TAG: ${{ needs.sync.outputs.previous_tag }}
+          BUILD_SHA: ${{ needs.sync.outputs.sha }}
+          RELEASE_VERSION: ${{ needs.wsl.outputs.version }}
+        run: node .github/scripts/render-fork-nightly-release-notes.cjs "$RUNNER_TEMP/fork-nightly-release-notes.md"
 
       - name: Publish complete release
         env:
@@ -326,7 +342,7 @@ jobs:
           git tag "$RELEASE_TAG" "$BUILD_SHA"
           git push origin "refs/tags/$RELEASE_TAG"
           # A draft keeps the updater from seeing a partially uploaded release.
-          gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease --latest=false --title "T3 Code Fork Nightly $RELEASE_VERSION" --notes "Windows x64 and macOS arm64 build of $GH_REPO at $BUILD_SHA. Includes this fork's customizations. Windows installer is unsigned. macOS is self-signed and not notarized."
+          gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease --latest=false --title "T3 Code Fork Nightly $RELEASE_VERSION" --notes-file "$RUNNER_TEMP/fork-nightly-release-notes.md"
           gh release upload "$RELEASE_TAG" release/*
           gh release edit "$RELEASE_TAG" --draft=false
           echo "Nightly: https://github.com/$GH_REPO/releases/tag/$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
