@@ -9,7 +9,7 @@ function commitUrl(repository, sha) {
   return `https://github.com/${repository}/commit/${sha}`;
 }
 
-function renderReleaseNotes({ repository, previousTag, buildSha, commits }) {
+function renderReleaseNotes({ repository, previousTag, commits }) {
   const lines = [];
 
   if (previousTag) {
@@ -29,10 +29,6 @@ function renderReleaseNotes({ repository, previousTag, buildSha, commits }) {
         ),
       );
     }
-    lines.push(
-      "",
-      `[Compare all changes](https://github.com/${repository}/compare/${encodeURIComponent(previousTag)}...${buildSha})`,
-    );
   } else {
     lines.push("First automated nightly published by this fork.");
   }
@@ -71,7 +67,6 @@ function main() {
     renderReleaseNotes({
       repository: GITHUB_REPOSITORY,
       previousTag,
-      buildSha: BUILD_SHA,
       commits: readCommits(previousTag, BUILD_SHA),
     }),
   );
