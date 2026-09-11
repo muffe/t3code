@@ -247,6 +247,20 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
+    id: "desktop-notifications",
+    title: "Desktop notifications",
+    to: "/settings/general",
+    searchTerms: ["native operating system background finished approval input alert"],
+    desktopOnly: true,
+  },
+  {
+    id: "desktop-attention-badge",
+    title: "Dock and taskbar badge",
+    to: "/settings/general",
+    searchTerms: ["waiting approval input attention icon count overlay"],
+    desktopOnly: true,
+  },
+  {
     id: "background-activity",
     title: "Background activity",
     to: "/settings/general",

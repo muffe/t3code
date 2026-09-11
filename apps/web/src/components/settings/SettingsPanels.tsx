@@ -584,6 +584,14 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["Delete confirmation"]
         : []),
       ...(settings.confirmQuit !== DEFAULT_UNIFIED_SETTINGS.confirmQuit ? ["Quit shortcut"] : []),
+      ...(settings.desktopNotificationsEnabled !==
+      DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled
+        ? ["Desktop notifications"]
+        : []),
+      ...(settings.desktopAttentionBadgeEnabled !==
+      DEFAULT_UNIFIED_SETTINGS.desktopAttentionBadgeEnabled
+        ? ["Dock and taskbar badge"]
+        : []),
       ...(isTextGenerationModelDirty ? ["Text generation model"] : []),
       ...getChangedBrowserSettingLabels(settings),
       ...(settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess
@@ -603,6 +611,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.diffColorScheme,
       settings.enableAgentBrowserAccess,
       settings.confirmQuit,
+      settings.desktopNotificationsEnabled,
+      settings.desktopAttentionBadgeEnabled,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
       settings.confirmThreadUnpin,
@@ -735,6 +745,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
       confirmThreadUnpin: DEFAULT_UNIFIED_SETTINGS.confirmThreadUnpin,
       confirmQuit: DEFAULT_UNIFIED_SETTINGS.confirmQuit,
+      desktopNotificationsEnabled: DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled,
+      desktopAttentionBadgeEnabled: DEFAULT_UNIFIED_SETTINGS.desktopAttentionBadgeEnabled,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
       fontFamilySans: DEFAULT_UNIFIED_SETTINGS.fontFamilySans,
       fontFamilyComposer: DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer,
@@ -2596,6 +2608,65 @@ export function GeneralSettingsPanel() {
           }
         />
       </SettingsSection>
+
+      {isElectron ? (
+        <SettingsSection id="desktop-attention" title="Desktop attention">
+          <SettingsRow
+            {...searchableSetting("desktop-notifications")}
+            description="Notify you when a background thread finishes or needs approval or input."
+            resetAction={
+              settings.desktopNotificationsEnabled !==
+              DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled ? (
+                <SettingResetButton
+                  label="desktop notifications"
+                  onClick={() =>
+                    updateSettings({
+                      desktopNotificationsEnabled:
+                        DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled,
+                    })
+                  }
+                />
+              ) : null
+            }
+            control={
+              <Switch
+                checked={settings.desktopNotificationsEnabled}
+                onCheckedChange={(checked) =>
+                  updateSettings({ desktopNotificationsEnabled: Boolean(checked) })
+                }
+                aria-label="Desktop notifications"
+              />
+            }
+          />
+          <SettingsRow
+            {...searchableSetting("desktop-attention-badge")}
+            description="Show when threads are waiting for your approval or input."
+            resetAction={
+              settings.desktopAttentionBadgeEnabled !==
+              DEFAULT_UNIFIED_SETTINGS.desktopAttentionBadgeEnabled ? (
+                <SettingResetButton
+                  label="dock and taskbar badge"
+                  onClick={() =>
+                    updateSettings({
+                      desktopAttentionBadgeEnabled:
+                        DEFAULT_UNIFIED_SETTINGS.desktopAttentionBadgeEnabled,
+                    })
+                  }
+                />
+              ) : null
+            }
+            control={
+              <Switch
+                checked={settings.desktopAttentionBadgeEnabled}
+                onCheckedChange={(checked) =>
+                  updateSettings({ desktopAttentionBadgeEnabled: Boolean(checked) })
+                }
+                aria-label="Dock and taskbar badge"
+              />
+            }
+          />
+        </SettingsSection>
+      ) : null}
 
       <SettingsSection id="projects-and-threads" title="Projects & threads">
         <SettingsRow

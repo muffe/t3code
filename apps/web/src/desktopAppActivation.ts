@@ -72,7 +72,7 @@ export async function handleDesktopAppActivationRequest(
     return failure(
       request.requestId,
       "platform-mismatch",
-      `The command path is for ${requestPlatform}, but the desktop app's primary environment uses ${target.platform}. Cross-platform path mapping is not supported.`,
+      `The workspace path is for ${requestPlatform}, but the desktop app's primary environment uses ${target.platform}. Use Add project to choose a path for that environment.`,
     );
   }
 

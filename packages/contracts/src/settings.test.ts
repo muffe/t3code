@@ -152,6 +152,26 @@ describe("ClientSettings diff colors", () => {
   });
 });
 
+describe("ClientSettings desktop attention", () => {
+  it("enables native attention signals by default", () => {
+    const settings = decodeClientSettings({});
+    expect(settings.desktopNotificationsEnabled).toBe(true);
+    expect(settings.desktopAttentionBadgeEnabled).toBe(true);
+  });
+
+  it("accepts boolean desktop attention patches", () => {
+    expect(
+      decodeClientSettingsPatch({
+        desktopNotificationsEnabled: false,
+        desktopAttentionBadgeEnabled: false,
+      }),
+    ).toMatchObject({
+      desktopNotificationsEnabled: false,
+      desktopAttentionBadgeEnabled: false,
+    });
+  });
+});
+
 describe("ClientSettings load balancing", () => {
   it("requires opt-in when settings are new or omit load balancing", () => {
     expect(decodeClientSettings({}).loadBalancingEnabled).toBe(false);

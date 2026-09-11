@@ -45,6 +45,10 @@ import {
   useSidebarVisibility,
 } from "./ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import {
+  DesktopProjectFolderDropOverlay,
+  useDesktopProjectFolderDrop,
+} from "./desktop/DesktopProjectFolderDrop";
 
 const MACOS_TRAFFIC_LIGHTS_LEFT_INSET = "90px";
 
@@ -154,6 +158,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const isOnSettings = pathname === "/settings" || pathname.startsWith("/settings/");
   const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
   const [sidebarWidth, setSidebarWidth] = useState(readInitialThreadSidebarWidth);
+  const projectFolderDrop = useDesktopProjectFolderDrop();
   // Subscribed rather than read once: the clamp must track live window size,
   // and a clamped drag ends with an unchanged width, which skips the re-render
   // that would otherwise refresh a render-time snapshot.
@@ -228,6 +233,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       >
         <ProjectProjectionRetention />
         <Sidebar
+          {...projectFolderDrop.handlers}
           side="left"
           collapsible="offcanvas"
           data-app-sidebar=""
@@ -253,6 +259,11 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
             <ThreadSidebar />
           )}
           <SidebarRail onDoubleClick={resetSidebarWidth} />
+          <DesktopProjectFolderDropOverlay
+            active={projectFolderDrop.active}
+            adding={projectFolderDrop.adding}
+            surface="sidebar"
+          />
         </Sidebar>
         {children}
         <SidebarControl />

@@ -1,12 +1,13 @@
 import type {
   DesktopBridge,
+  DesktopThreadNotificationTarget,
   DesktopPreviewPointerEvent,
   DesktopPreviewRecordingFrame,
   DesktopPreviewTabState,
   DesktopSnapShotEvent,
 } from "@t3tools/contracts";
 import { exposeClerkBridge } from "@clerk/electron/preload";
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 import * as IpcChannels from "./ipc/channels.ts";
 
@@ -25,6 +26,12 @@ function isSnapShotEvent(value: unknown): value is DesktopSnapShotEvent {
     SNAP_SHOT_EVENT_TYPES.has(type) &&
     (id === undefined || typeof id === "string")
   );
+}
+
+function isThreadNotificationTarget(value: unknown): value is DesktopThreadNotificationTarget {
+  if (typeof value !== "object" || value === null) return false;
+  const { environmentId, threadId } = value as { environmentId?: unknown; threadId?: unknown };
+  return typeof environmentId === "string" && typeof threadId === "string";
 }
 
 exposeClerkBridge({ passkeys: true });
@@ -155,6 +162,27 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   openSystemSettings: (pane: string) =>
     ipcRenderer.invoke(IpcChannels.OPEN_SYSTEM_SETTINGS_CHANNEL, pane),
   probeRemoteEditors: () => ipcRenderer.invoke(IpcChannels.PROBE_REMOTE_EDITORS_CHANNEL, undefined),
+  showThreadNotification: (input) =>
+    ipcRenderer.invoke(IpcChannels.SHOW_THREAD_NOTIFICATION_CHANNEL, input),
+  setAttentionBadgeCount: (count) =>
+    ipcRenderer.invoke(IpcChannels.SET_ATTENTION_BADGE_COUNT_CHANNEL, count),
+  onThreadNotificationClick: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, target: unknown) => {
+      if (isThreadNotificationTarget(target)) listener(target);
+    };
+    ipcRenderer.on(IpcChannels.THREAD_NOTIFICATION_CLICK_CHANNEL, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.THREAD_NOTIFICATION_CLICK_CHANNEL, wrappedListener);
+    };
+  },
+  getPathForDroppedFile: (file) => {
+    try {
+      const path = webUtils.getPathForFile(file);
+      return path.length > 0 ? path : null;
+    } catch {
+      return null;
+    }
+  },
   onMenuAction: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, action: unknown) => {
       if (typeof action !== "string") return;
