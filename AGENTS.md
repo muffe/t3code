@@ -40,6 +40,10 @@ The rest of this document is meant to help you navigate the codebase and make ch
 
 Of note: Most T3 Code contributions will come from T3 Code itself, often controlled remotely. This means you should be careful about accessing data, killing dev servers, and other things that may damage the T3 Code instance that the contributor is using.
 
+## Session start
+
+Before changing files in a new session, fetch `origin` and verify that the checked-out branch is up to date with its upstream. GitHub Actions automatically syncs commits from the fork source, so never assume the existing checkout is current. If the branch is behind or diverged, or local changes prevent a safe update, report that before proceeding.
+
 ## A small glossary
 
 We need to be on the same page with terminology. When communicating, use this language:

@@ -182,21 +182,21 @@ describe("ClientSettings diff colors", () => {
 });
 
 describe("ClientSettings desktop attention", () => {
-  it("enables native attention signals by default", () => {
+  it("disables native attention signals by default", () => {
     const settings = decodeClientSettings({});
-    expect(settings.desktopNotificationsEnabled).toBe(true);
-    expect(settings.desktopAttentionBadgeEnabled).toBe(true);
+    expect(settings.desktopNotificationsEnabled).toBe(false);
+    expect(settings.desktopAttentionBadgeEnabled).toBe(false);
   });
 
-  it("accepts boolean desktop attention patches", () => {
+  it("accepts explicit opt-in desktop attention patches", () => {
     expect(
       decodeClientSettingsPatch({
-        desktopNotificationsEnabled: false,
-        desktopAttentionBadgeEnabled: false,
+        desktopNotificationsEnabled: true,
+        desktopAttentionBadgeEnabled: true,
       }),
     ).toMatchObject({
-      desktopNotificationsEnabled: false,
-      desktopAttentionBadgeEnabled: false,
+      desktopNotificationsEnabled: true,
+      desktopAttentionBadgeEnabled: true,
     });
   });
 });
