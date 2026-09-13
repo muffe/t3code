@@ -10,6 +10,7 @@ export const SHOW_THREAD_NOTIFICATION_CHANNEL = "desktop:show-thread-notificatio
 export const SET_ATTENTION_BADGE_COUNT_CHANNEL = "desktop:set-attention-badge-count";
 export const THREAD_NOTIFICATION_CLICK_CHANNEL = "desktop:thread-notification-click";
 export const MENU_ACTION_CHANNEL = "desktop:menu-action";
+export const PASTE_AS_TEXT_CHANNEL = "desktop:paste-as-text";
 export const SNAP_SHOT_EVENT_CHANNEL = "desktop:snap-shot-event";
 export const QUIT_SHORTCUT_CHANNEL = "desktop:quit-shortcut";
 export const GET_WINDOW_FULLSCREEN_STATE_CHANNEL = "desktop:get-window-fullscreen-state";

@@ -1343,6 +1343,8 @@ export interface DesktopBridge {
   ) => () => void;
   /** Resolve an OS path for a dropped Electron File without exposing Node APIs. */
   getPathForDroppedFile?: (file: File) => string | null;
+  /** Present when the desktop shell can perform an ordered plain-text paste. */
+  pasteAsText?: () => Promise<void>;
   onMenuAction: (listener: (action: string) => void) => () => void;
   onSnapShotEvent?: (listener: (event: DesktopSnapShotEvent) => void) => () => void;
   /**
