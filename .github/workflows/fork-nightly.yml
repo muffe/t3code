@@ -78,11 +78,11 @@ jobs:
           fi
 
   wsl:
-    name: Build WSL terminal helper
+    name: Build Linux CLI archive for WSL
     needs: sync
     if: needs.sync.outputs.build == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 45
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
@@ -102,6 +102,7 @@ jobs:
           run-install: |
             args:
               - --filter=t3...
+              - --filter=@t3tools/web...
               - --filter=@t3tools/scripts...
 
       - name: Set nightly version
@@ -113,19 +114,58 @@ jobs:
           set -euo pipefail
           node scripts/resolve-nightly-release.ts --date "$(date -u +%Y%m%d)" --run-number "$((GITHUB_RUN_NUMBER * 1000 + GITHUB_RUN_ATTEMPT))" --sha "$BUILD_SHA" --github-output
 
-      - name: Build Linux node-pty
+      - name: Cache resource monitor
+        id: resource_monitor_cache
+        uses: actions/cache@v6
+        with:
+          path: native/resource-monitor/target/x86_64-unknown-linux-gnu/release/t3-resource-monitor
+          key: resource-monitor-x86_64-unknown-linux-gnu-${{ hashFiles('native/resource-monitor/Cargo.lock', 'native/resource-monitor/Cargo.toml', 'native/resource-monitor/src/**') }}
+
+      - name: Setup Rust
+        if: steps.resource_monitor_cache.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Build resource monitor
+        if: steps.resource_monitor_cache.outputs.cache-hit != 'true'
+        run: cargo build --locked --release --manifest-path native/resource-monitor/Cargo.toml --target x86_64-unknown-linux-gnu
+
+      - name: Align package versions
+        run: node scripts/update-release-package-versions.ts "${{ steps.version.outputs.version }}"
+
+      - name: Build CLI package
+        run: vp run --filter t3 build
+
+      - name: Build CLI single-executable
+        env:
+          # Keep in step with SEA_NODE_VERSION in apps/server/vite.config.ts.
+          VP_NODE_VERSION: "26.8.2"
+        run: node apps/server/scripts/cli.ts build-exe --verbose
+
+      - name: Stage resource monitor for the CLI archive
         run: |
           set -euo pipefail
-          pty_pkg="$(node -e "console.log(require.resolve('node-pty/package.json', { paths: [process.cwd() + '/apps/server'] }))")"
-          pty_dir="$(dirname "$pty_pkg")"
-          (cd "$pty_dir" && npx --yes node-gyp rebuild)
-          mkdir -p wsl-prebuild
-          cp "$pty_dir/build/Release/pty.node" wsl-prebuild/pty.node
+          target_dir="$RUNNER_TEMP/cli-resource-monitor/linux-x64"
+          mkdir -p "$target_dir"
+          cp native/resource-monitor/target/x86_64-unknown-linux-gnu/release/t3-resource-monitor "$target_dir/"
+
+      - name: Build CLI archive
+        run: |
+          node scripts/build-cli-archive.ts \
+            --platform linux \
+            --arch x64 \
+            --version "${{ steps.version.outputs.version }}" \
+            --resource-monitor-dir "$RUNNER_TEMP/cli-resource-monitor" \
+            --output-dir release-cli
+
+      - name: Smoke-test CLI archive
+        run: node scripts/smoke-cli-archive.ts --archive release-cli/* --expect-version "${{ steps.version.outputs.version }}"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: fork-wsl-node-pty
-          path: wsl-prebuild/pty.node
+          name: fork-wsl-runtime
+          path: release-cli/t3-*-linux-x64.tar.gz
           if-no-files-found: error
           retention-days: 1
 
@@ -175,8 +215,8 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: fork-wsl-node-pty
-          path: wsl-prebuild
+          name: fork-wsl-runtime
+          path: wsl-runtime
 
       - name: Align package versions
         env:
@@ -187,7 +227,7 @@ jobs:
         env:
           T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
           BUILD_VERSION: ${{ needs.wsl.outputs.version }}
-        run: vp run dist:desktop:artifact --platform win --target nsis --arch x64 --build-version "$env:BUILD_VERSION" --wsl-prebuild wsl-prebuild/pty.node --verbose
+        run: vp run dist:desktop:artifact --platform win --target nsis --arch x64 --build-version "$env:BUILD_VERSION" --wsl-runtime "$env:GITHUB_WORKSPACE/wsl-runtime/t3-$env:BUILD_VERSION-linux-x64.tar.gz" --verbose
 
       - name: Verify update assets
         shell: pwsh
