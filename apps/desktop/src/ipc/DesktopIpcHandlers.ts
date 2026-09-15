@@ -69,8 +69,8 @@ import {
 } from "./methods/snapShot.ts";
 import * as PreviewIpc from "./methods/preview.ts";
 import * as AppActivationIpc from "./methods/appActivation.ts";
-import { setAttentionBadgeCount, showThreadNotification } from "./methods/attention.ts";
 import { getWslState, setWslBackendEnabled, setWslDistro, setWslOnly } from "./methods/wsl.ts";
+import { installForkDesktopIpcHandlers } from "../fork/installIpcHandlers.ts";
 
 export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers")(function* () {
   const ipc = yield* DesktopIpc.DesktopIpc;
@@ -136,8 +136,7 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(checkSystemPermission);
   yield* ipc.handle(pasteAsText);
   yield* ipc.handle(probeRemoteEditors);
-  yield* ipc.handle(showThreadNotification);
-  yield* ipc.handle(setAttentionBadgeCount);
+  yield* installForkDesktopIpcHandlers();
   yield* ipc.handle(getUpdateState);
   yield* ipc.handle(setUpdateChannel);
   yield* ipc.handle(downloadUpdate);

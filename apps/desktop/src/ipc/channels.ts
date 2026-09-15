@@ -1,3 +1,5 @@
+export * from "../fork/channels.ts";
+
 export const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
 export const SET_NOTIFICATION_BADGE_CHANNEL = "desktop:set-notification-badge";
 export const PICK_PROJECT_FAVICON_CHANNEL = "desktop:pick-project-favicon";
@@ -7,9 +9,6 @@ export const CONTEXT_MENU_CHANNEL = "desktop:context-menu";
 export const OPEN_EXTERNAL_CHANNEL = "desktop:open-external";
 export const OPEN_SYSTEM_SETTINGS_CHANNEL = "desktop:open-system-settings";
 export const PROBE_REMOTE_EDITORS_CHANNEL = "desktop:probe-remote-editors";
-export const SHOW_THREAD_NOTIFICATION_CHANNEL = "desktop:show-thread-notification";
-export const SET_ATTENTION_BADGE_COUNT_CHANNEL = "desktop:set-attention-badge-count";
-export const THREAD_NOTIFICATION_CLICK_CHANNEL = "desktop:thread-notification-click";
 export const MENU_ACTION_CHANNEL = "desktop:menu-action";
 export const PASTE_AS_TEXT_CHANNEL = "desktop:paste-as-text";
 export const SNAP_SHOT_EVENT_CHANNEL = "desktop:snap-shot-event";

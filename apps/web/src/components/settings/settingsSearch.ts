@@ -2,6 +2,7 @@ import { isElectron } from "~/env";
 import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
 import type { EnvironmentId } from "@t3tools/contracts";
 import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
+import { FORK_SETTINGS_SEARCH_ITEMS } from "../../fork/settingsSearch";
 import {
   validateSettingsScopeSearch,
   type ResolvedSettingsScope,
@@ -293,12 +294,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["command menu dollar $ slash /"],
   },
   {
-    id: "usage-limits-bar",
-    title: "Show usage limits below chat",
-    to: "/settings/general",
-    searchTerms: ["provider quota remaining reset info bar composer usage limits"],
-  },
-  {
     id: "composer-collapse",
     title: "Collapse composer on scroll",
     to: "/settings/general",
@@ -319,20 +314,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [
       "resume running active interrupted work restart reboot machine crash desktop update automatically",
     ],
-  },
-  {
-    id: "desktop-notifications",
-    title: "Desktop notifications",
-    to: "/settings/general",
-    searchTerms: ["native operating system background finished approval input alert"],
-    desktopOnly: true,
-  },
-  {
-    id: "desktop-attention-badge",
-    title: "Dock and taskbar badge",
-    to: "/settings/general",
-    searchTerms: ["waiting approval input attention icon count overlay"],
-    desktopOnly: true,
   },
   {
     id: "background-activity",
@@ -738,6 +719,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/archived",
     searchTerms: ["restore reopen deleted history projects"],
   },
+  ...FORK_SETTINGS_SEARCH_ITEMS,
 ] as const satisfies ReadonlyArray<SettingsSearchItem>;
 
 export type SettingsSearchItemId = (typeof SETTINGS_SEARCH_ITEMS)[number]["id"];

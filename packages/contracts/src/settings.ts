@@ -39,6 +39,7 @@ import {
   type ProviderDriverKind,
 } from "./providerInstance.ts";
 import { PullRequestMergeMethod } from "./pullRequest.ts";
+import * as ForkSettings from "./forkSettings.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
 
@@ -350,14 +351,7 @@ export const ClientSettingsSchema = Schema.Struct({
   confirmQuit: QuitConfirmationModeSetting.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_QUIT_CONFIRMATION_MODE)),
   ),
-  // Desktop-only attention signals. Other clients persist the values for
-  // settings portability but do not act on them.
-  desktopNotificationsEnabled: Schema.Boolean.pipe(
-    Schema.withDecodingDefault(Effect.succeed(false)),
-  ),
-  desktopAttentionBadgeEnabled: Schema.Boolean.pipe(
-    Schema.withDecodingDefault(Effect.succeed(false)),
-  ),
+  ...ForkSettings.FORK_DESKTOP_SETTINGS_FIELDS,
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   confirmThreadUnpin: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
@@ -439,7 +433,7 @@ export const ClientSettingsSchema = Schema.Struct({
   // settles the composer into its single-line layout. Losing focus never does.
   composerCollapseOnScroll: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   proactivePanelsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
-  showUsageLimitsBar: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  ...ForkSettings.FORK_CHAT_SETTINGS_FIELDS,
   showSkillsInSlashMenu: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   // Legacy sidebar (the original per-project tree). Deliberately a fresh key
   // (was `sidebarV2Enabled` + `sidebarV2ConfiguredByUser`): decoding drops the
@@ -1463,8 +1457,7 @@ export const ClientSettingsPatch = Schema.Struct({
   browserProfiles: Schema.optionalKey(Schema.Array(BrowserProfile)),
   browserDefaultProfileId: Schema.optionalKey(BrowserProfileId),
   confirmQuit: Schema.optionalKey(QuitConfirmationMode),
-  desktopNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
-  desktopAttentionBadgeEnabled: Schema.optionalKey(Schema.Boolean),
+  ...ForkSettings.FORK_DESKTOP_SETTINGS_PATCH_FIELDS,
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
   confirmThreadUnpin: Schema.optionalKey(Schema.Boolean),
@@ -1511,7 +1504,7 @@ export const ClientSettingsPatch = Schema.Struct({
   contextWindowMeterEnabled: Schema.optionalKey(Schema.Boolean),
   composerCollapseOnScroll: Schema.optionalKey(Schema.Boolean),
   proactivePanelsEnabled: Schema.optionalKey(Schema.Boolean),
-  showUsageLimitsBar: Schema.optionalKey(Schema.Boolean),
+  ...ForkSettings.FORK_CHAT_SETTINGS_PATCH_FIELDS,
   showSkillsInSlashMenu: Schema.optionalKey(Schema.Boolean),
   legacySidebarEnabled: Schema.optionalKey(Schema.Boolean),
   sidebarProjectGroupingMode: Schema.optionalKey(SidebarProjectGroupingMode),

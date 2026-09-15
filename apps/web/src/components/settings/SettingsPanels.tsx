@@ -170,6 +170,7 @@ import {
 import { searchableSetting } from "./settingsSearch";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
+import * as ForkSettings from "../../fork/Settings";
 
 const ENVIRONMENT_IDENTIFICATION_LABELS: Record<EnvironmentIdentificationMode, string> = {
   artwork: "Artwork",
@@ -517,6 +518,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
   const isBackgroundActivityDirty = hasChangedBackgroundActivitySettings(settings);
+  const changedForkSettingLabels = ForkSettings.getChangedForkSettingLabels(settings);
 
   const changedSettingLabels = useMemo(
     () => [
@@ -613,14 +615,7 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["Delete confirmation"]
         : []),
       ...(settings.confirmQuit !== DEFAULT_UNIFIED_SETTINGS.confirmQuit ? ["Quit shortcut"] : []),
-      ...(settings.desktopNotificationsEnabled !==
-      DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled
-        ? ["Desktop notifications"]
-        : []),
-      ...(settings.desktopAttentionBadgeEnabled !==
-      DEFAULT_UNIFIED_SETTINGS.desktopAttentionBadgeEnabled
-        ? ["Dock and taskbar badge"]
-        : []),
+      ...changedForkSettingLabels,
       ...(isTextGenerationModelDirty ? ["Text generation model"] : []),
       ...getChangedBrowserSettingLabels(settings),
       ...(settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess
@@ -640,8 +635,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.diffColorScheme,
       settings.enableAgentBrowserAccess,
       settings.confirmQuit,
-      settings.desktopNotificationsEnabled,
-      settings.desktopAttentionBadgeEnabled,
+      changedForkSettingLabels,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
       settings.confirmThreadUnpin,
@@ -780,8 +774,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
       confirmThreadUnpin: DEFAULT_UNIFIED_SETTINGS.confirmThreadUnpin,
       confirmQuit: DEFAULT_UNIFIED_SETTINGS.confirmQuit,
-      desktopNotificationsEnabled: DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled,
-      desktopAttentionBadgeEnabled: DEFAULT_UNIFIED_SETTINGS.desktopAttentionBadgeEnabled,
+      ...ForkSettings.FORK_SETTINGS_DEFAULTS,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
       fontFamilySans: DEFAULT_UNIFIED_SETTINGS.fontFamilySans,
       fontFamilyComposer: DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer,
@@ -2092,10 +2085,6 @@ function LegacyFeaturesSection() {
   );
 }
 
-/**
- * Edits general preferences through the unified settings hooks, which route
- * client preferences to local storage and server settings to their environments.
- */
 export function GeneralSettingsPanel() {
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
@@ -2578,31 +2567,7 @@ export function GeneralSettingsPanel() {
           }
         />
 
-        <SettingsRow
-          {...searchableSetting("usage-limits-bar")}
-          description="Show remaining provider limits and reset times below the chat composer."
-          resetAction={
-            settings.showUsageLimitsBar !== DEFAULT_UNIFIED_SETTINGS.showUsageLimitsBar ? (
-              <SettingResetButton
-                label="usage limits bar"
-                onClick={() =>
-                  updateSettings({
-                    showUsageLimitsBar: DEFAULT_UNIFIED_SETTINGS.showUsageLimitsBar,
-                  })
-                }
-              />
-            ) : null
-          }
-          control={
-            <Switch
-              checked={settings.showUsageLimitsBar}
-              onCheckedChange={(checked) =>
-                updateSettings({ showUsageLimitsBar: Boolean(checked) })
-              }
-              aria-label="Show usage limits below chat"
-            />
-          }
-        />
+        <ForkSettings.ForkUsageLimitsSettingsRow />
 
         <SettingsRow
           {...searchableSetting("composer-collapse")}
@@ -2793,64 +2758,7 @@ export function GeneralSettingsPanel() {
         />
       </SettingsSection>
 
-      {isElectron ? (
-        <SettingsSection id="desktop-attention" title="Desktop attention">
-          <SettingsRow
-            {...searchableSetting("desktop-notifications")}
-            description="Notify you when a background thread finishes or needs approval or input."
-            resetAction={
-              settings.desktopNotificationsEnabled !==
-              DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled ? (
-                <SettingResetButton
-                  label="desktop notifications"
-                  onClick={() =>
-                    updateSettings({
-                      desktopNotificationsEnabled:
-                        DEFAULT_UNIFIED_SETTINGS.desktopNotificationsEnabled,
-                    })
-                  }
-                />
-              ) : null
-            }
-            control={
-              <Switch
-                checked={settings.desktopNotificationsEnabled}
-                onCheckedChange={(checked) =>
-                  updateSettings({ desktopNotificationsEnabled: Boolean(checked) })
-                }
-                aria-label="Desktop notifications"
-              />
-            }
-          />
-          <SettingsRow
-            {...searchableSetting("desktop-attention-badge")}
-            description="Show when threads are waiting for your approval or input."
-            resetAction={
-              settings.desktopAttentionBadgeEnabled !==
-              DEFAULT_UNIFIED_SETTINGS.desktopAttentionBadgeEnabled ? (
-                <SettingResetButton
-                  label="dock and taskbar badge"
-                  onClick={() =>
-                    updateSettings({
-                      desktopAttentionBadgeEnabled:
-                        DEFAULT_UNIFIED_SETTINGS.desktopAttentionBadgeEnabled,
-                    })
-                  }
-                />
-              ) : null
-            }
-            control={
-              <Switch
-                checked={settings.desktopAttentionBadgeEnabled}
-                onCheckedChange={(checked) =>
-                  updateSettings({ desktopAttentionBadgeEnabled: Boolean(checked) })
-                }
-                aria-label="Dock and taskbar badge"
-              />
-            }
-          />
-        </SettingsSection>
-      ) : null}
+      {isElectron ? <ForkSettings.ForkDesktopAttentionSettingsSection /> : null}
 
       <SettingsSection id="projects-and-threads" title="Projects & threads">
         <SettingsRow

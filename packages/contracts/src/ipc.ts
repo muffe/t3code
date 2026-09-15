@@ -88,7 +88,7 @@ import type {
   OrchestrationThreadStreamItem,
 } from "./orchestration.ts";
 import { SnapShotSource } from "./orchestration.ts";
-import { EnvironmentId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { EnvironmentId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { BrowserProfileId } from "./browserProfile.ts";
 import type {
   BrowserImportResult,
@@ -108,10 +108,13 @@ import type {
   SourceControlRepositoryInfo,
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
+import type { ForkDesktopBridge } from "./forkDesktop.ts";
 import type {
   DesktopAppActivationRequest,
   DesktopAppActivationResponse,
 } from "./desktopAppActivation.ts";
+
+export * from "./forkDesktop.ts";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -1211,32 +1214,7 @@ export const DesktopPreviewAutomationWaitForInputSchema = Schema.Struct({
 export const SystemSettingsPaneSchema = Schema.Literals(["full-disk-access"]);
 export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
-export const DesktopThreadNotificationKindSchema = Schema.Literals([
-  "completed",
-  "approval",
-  "input",
-]);
-export type DesktopThreadNotificationKind = typeof DesktopThreadNotificationKindSchema.Type;
-
-export const DesktopThreadNotificationTargetSchema = Schema.Struct({
-  environmentId: EnvironmentId,
-  threadId: ThreadId,
-});
-export type DesktopThreadNotificationTarget = typeof DesktopThreadNotificationTargetSchema.Type;
-
-export const DesktopThreadNotificationInputSchema = Schema.Struct({
-  ...DesktopThreadNotificationTargetSchema.fields,
-  threadTitle: TrimmedNonEmptyString.check(Schema.isMaxLength(200)),
-  kind: DesktopThreadNotificationKindSchema,
-});
-export type DesktopThreadNotificationInput = typeof DesktopThreadNotificationInputSchema.Type;
-
-export const DesktopAttentionBadgeCountSchema = Schema.Int.check(
-  Schema.isBetween({ minimum: 0, maximum: 999 }),
-);
-export type DesktopAttentionBadgeCount = typeof DesktopAttentionBadgeCountSchema.Type;
-
-export interface DesktopBridge {
+export interface DesktopBridge extends ForkDesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
   /** The desktop client's OS platform, read from Electron's preload process. */
   getClientPlatform?: () => string;
@@ -1337,16 +1315,6 @@ export interface DesktopBridge {
    * builds lack it; callers fall back to VS Code only.
    */
   probeRemoteEditors?: () => Promise<readonly EditorId[]>;
-  /** Optional while older desktop shells can host a newer web client. */
-  showThreadNotification?: (input: DesktopThreadNotificationInput) => Promise<boolean>;
-  /** Optional while older desktop shells can host a newer web client. */
-  setAttentionBadgeCount?: (count: DesktopAttentionBadgeCount) => Promise<void>;
-  /** Optional while older desktop shells can host a newer web client. */
-  onThreadNotificationClick?: (
-    listener: (target: DesktopThreadNotificationTarget) => void,
-  ) => () => void;
-  /** Resolve an OS path for a dropped Electron File without exposing Node APIs. */
-  getPathForDroppedFile?: (file: File) => string | null;
   /** Present when the desktop shell can perform an ordered plain-text paste. */
   pasteAsText?: () => Promise<void>;
   onMenuAction: (listener: (action: string) => void) => () => void;
