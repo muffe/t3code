@@ -1,4 +1,5 @@
 import type {
+  EnvironmentId,
   ProviderInstanceId,
   ServerProvider,
   UsageLimitSourceSnapshots,
@@ -11,11 +12,45 @@ import {
 } from "@t3tools/shared/usageLimits";
 import { useMemo, useState } from "react";
 
-import { RedactedSensitiveText } from "../settings/RedactedSensitiveText";
-import { barColor } from "../usage/UsageLimits";
+import { RedactedSensitiveText } from "../components/settings/RedactedSensitiveText";
+import { barColor } from "../components/usage/UsageLimits";
+import { useEnvironmentSettings } from "../hooks/useSettings";
+import { useEnvironment } from "../state/environments";
+
+const EMPTY_USAGE_LIMIT_SOURCES: UsageLimitSourceSnapshots = [];
+
+export function ForkChatFooter({
+  environmentId,
+  instanceId,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly instanceId: ProviderInstanceId | null;
+}) {
+  const enabled = useEnvironmentSettings(environmentId, (settings) => settings.showUsageLimitsBar);
+  const environment = useEnvironment(environmentId);
+  const serverConfig = environment?.serverConfig ?? null;
+
+  if (
+    !enabled ||
+    instanceId === null ||
+    environment?.connection.phase !== "connected" ||
+    serverConfig === null
+  ) {
+    return null;
+  }
+
+  return (
+    <ProviderUsageLimitsBar
+      key={`${environmentId}:${instanceId}`}
+      instanceId={instanceId}
+      providers={serverConfig.providers}
+      sources={serverConfig.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES}
+    />
+  );
+}
 
 /** Reads the same provider snapshots as Limits, without polling from the composer. */
-export function UsageLimitsBar({
+function ProviderUsageLimitsBar({
   instanceId,
   providers,
   sources,
@@ -45,10 +80,7 @@ export function UsageLimitsBar({
         {report.accounts.map((account) => {
           const notice = limitsNotice(account.limits);
           return (
-            <div
-              key={account.id}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 py-0.5"
-            >
+            <div key={account.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-0.5">
               {report.accounts.length > 1 ? (
                 <RedactedSensitiveText
                   value={account.displayName || account.email || account.id}

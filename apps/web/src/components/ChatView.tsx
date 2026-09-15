@@ -8,7 +8,7 @@ import {
 } from "@t3tools/shared/usageLimits";
 import { feedbackBannerItem } from "./chat/ComposerFeedback";
 import { usageLimitsBannerItem } from "./chat/ComposerUsageLimits";
-import { UsageLimitsBar } from "./chat/UsageLimitsBar";
+import { ForkChatFooter } from "../fork/ChatFooter";
 import { derivePendingRequests } from "@t3tools/client-runtime/pending-requests";
 import {
   questionAttachmentDraftId,
@@ -1441,10 +1441,6 @@ function releaseChatTimelineAnchor<T extends { readonly messageId: MessageId | n
   return current.messageId === null ? current : { ...current, messageId: null };
 }
 
-/**
- * Hosts the conversation and composer for a local draft or persisted thread,
- * using the route's environment for provider data and thread commands.
- */
 export default function ChatView(props: ChatViewProps) {
   const {
     environmentId,
@@ -9727,16 +9723,10 @@ export default function ChatView(props: ChatViewProps) {
                         </div>
                       </div>
                     </ComposerSurface.Shell>
-                    {settings.showUsageLimitsBar &&
-                    activeProviderInstanceId !== null &&
-                    !activeEnvironmentUnavailable ? (
-                      <UsageLimitsBar
-                        key={`${environmentId}:${activeProviderInstanceId}`}
-                        instanceId={activeProviderInstanceId}
-                        providers={providerStatuses}
-                        sources={usageLimitSources}
-                      />
-                    ) : null}
+                    <ForkChatFooter
+                      environmentId={environmentId}
+                      instanceId={activeProviderInstanceId}
+                    />
                     <div
                       aria-hidden
                       className="h-[calc(env(safe-area-inset-bottom)+1rem)] sm:h-[calc(env(safe-area-inset-bottom)+1.25rem)]"
