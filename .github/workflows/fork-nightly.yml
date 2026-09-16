@@ -95,6 +95,10 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
+      - name: Enable T3 Connect public configuration
+        shell: bash
+        run: cp .env.example .env
+
       - uses: voidzero-dev/setup-vp@v1
         with:
           node-version-file: package.json
@@ -183,6 +187,10 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
+      - name: Enable T3 Connect public configuration
+        shell: bash
+        run: cp .env.example .env
+
       - uses: voidzero-dev/setup-vp@v1
         with:
           node-version-file: package.json
@@ -261,6 +269,10 @@ jobs:
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
+
+      - name: Enable T3 Connect public configuration
+        shell: bash
+        run: cp .env.example .env
 
       - uses: voidzero-dev/setup-vp@v1
         with:

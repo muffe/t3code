@@ -33,8 +33,11 @@ updates include this fork's changes.
 
 The official app keeps its original update feed until replaced by a fork build.
 An independently running remote server still needs its own update process.
-Official T3 Connect configuration and signing credentials are not included in
-this workflow; direct remote connections use the existing environment setup.
+The workflow enables T3 Connect with the public production identifiers from
+`.env.example`. macOS passkeys remain unavailable because the self-signed fork
+certificate cannot carry Apple's Associated Domains entitlement; use another
+configured sign-in method instead. Direct remote connections continue to use
+the existing environment setup.
 
 Releases are published only after the installer, blockmap, and `nightly.yml`
 have all uploaded. Keep these assets together: `nightly.yml` is what the desktop
