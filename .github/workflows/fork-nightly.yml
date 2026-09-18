@@ -26,6 +26,7 @@ jobs:
       contents: read
       actions: write
     outputs:
+      base_sha: ${{ steps.sync.outputs.base_sha }}
       sha: ${{ steps.sync.outputs.sha }}
       build: ${{ steps.sync.outputs.build }}
       previous_tag: ${{ steps.sync.outputs.previous_tag }}
@@ -49,18 +50,18 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          base_sha="$(git rev-parse HEAD)"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
           git fetch --no-tags https://github.com/pingdotgg/t3code.git main
           if ! git merge --no-ff -m "Merge upstream main [skip ci]" FETCH_HEAD; then
-            git merge --abort
-            echo "::error::Upstream conflicts with this fork. Resolve the merge locally and rerun this workflow."
-            exit 1
+            if ! node .github/scripts/apply-fork-overlay.cjs --write; then
+              git merge --abort
+              echo "::error::Upstream has an unknown fork conflict. Resolve the merge locally and rerun this workflow."
+              exit 1
+            fi
+            git commit --no-edit
           fi
-          git push origin HEAD:main
-          # Fork releases do not use upstream's hosted runners or publishers.
-          gh api "repos/$GITHUB_REPOSITORY/actions/workflows" --paginate --jq '.workflows[] | select(.path != ".github/workflows/fork-nightly.yml" and .state == "active") | .id' |
-            while read -r workflow_id; do
-              gh api --method PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/disable"
-            done
+          node .github/scripts/apply-fork-overlay.cjs --check
           sha="$(git rev-parse HEAD)"
           last_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[] | select(.prerelease and (.draft | not) and (.tag_name | contains("-nightly.")))][0].tag_name // ""')"
           echo "previous_tag=$last_tag" >> "$GITHUB_OUTPUT"
@@ -72,6 +73,12 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           if [[ "$FORCE_BUILD" == "true" || "$sha" != "$last_sha" ]]; then
             echo "build=true" >> "$GITHUB_OUTPUT"
+            # Fork releases do not use upstream's hosted runners or publishers.
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows" --paginate --jq '.workflows[] | select(.path != ".github/workflows/fork-nightly.yml" and .state == "active") | .id' |
+              while read -r workflow_id; do
+                gh api --method PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/disable"
+              done
+            git push --force origin HEAD:refs/heads/fork-nightly-candidate
           else
             echo "build=false" >> "$GITHUB_OUTPUT"
             echo "The latest nightly already contains $sha." >> "$GITHUB_STEP_SUMMARY"
@@ -359,6 +366,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -385,11 +393,22 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.wsl.outputs.tag }}
           RELEASE_VERSION: ${{ needs.wsl.outputs.version }}
+          BASE_SHA: ${{ needs.sync.outputs.base_sha }}
           BUILD_SHA: ${{ needs.sync.outputs.sha }}
         run: |
           set -euo pipefail
-          # The deploy key can tag commits containing workflow changes, including
-          # when main has advanced while the platform builds were running.
+          git fetch --no-tags origin main
+          current_main="$(git rev-parse origin/main)"
+          if [[ "$current_main" != "$BASE_SHA" ]]; then
+            echo "::error::main moved from $BASE_SHA to $current_main while the nightly was building. Rerun against the new head."
+            exit 1
+          fi
+          git push origin "$BUILD_SHA:refs/heads/main"
+          # Recheck after promotion so newly introduced upstream workflows are disabled.
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows" --paginate --jq '.workflows[] | select(.path != ".github/workflows/fork-nightly.yml" and .state == "active") | .id' |
+            while read -r workflow_id; do
+              gh api --method PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/disable"
+            done
           git tag "$RELEASE_TAG" "$BUILD_SHA"
           git push origin "refs/tags/$RELEASE_TAG"
           # A draft keeps the updater from seeing a partially uploaded release.

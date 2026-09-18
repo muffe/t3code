@@ -1,15 +1,22 @@
 # Personal desktop nightlies
 
 The `Fork Desktop Nightly` workflow merges `pingdotgg/t3code:main` into this
-fork's `main` every day at 03:23 UTC. It builds Windows x64 and macOS arm64 when the source differs
-from the last published nightly. Run it manually from GitHub Actions for an
-immediate build; select **force** to rebuild unchanged source.
+fork every four hours at 23 minutes past the hour. It builds Windows x64 and
+macOS arm64 when the source differs from the last published nightly. Run it
+manually from GitHub Actions for an immediate build; select **force** to rebuild
+unchanged source.
 
-Keep personal changes on this fork's `main`. Sync uses a normal merge, never a
-reset or force push. A conflict fails the workflow before publication; resolve
-the merge locally, push it, and rerun. A failed build leaves the previous release
-available. GitHub's scheduled runs may be delayed, and inactive public forks can
-have schedules disabled after 60 days.
+Keep personal changes on this fork's `main`. Sync creates a normal merge on the
+temporary `fork-nightly-candidate` branch and rebuilds the fork's small,
+documented integration points on top of the upstream versions. Unknown conflicts
+still fail loudly and require a local merge. So do known files with fork changes
+outside the declared overlay, preventing the resolver from silently discarding
+new work. The workflow promotes the tested commit to `main` only after every
+platform build succeeds, and only if `main` has not moved in the meantime. A
+failed build therefore leaves both `main` and the previous release untouched;
+the candidate branch remains available for inspection. GitHub's scheduled runs
+may be delayed, and inactive public forks can have schedules disabled after 60
+days.
 
 ## Initial setup
 

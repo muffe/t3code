@@ -106,8 +106,11 @@ jobs:
       - name: Test preview artifact validation
         run: python3 -B .github/scripts/stage-preview-bundle.test.py
 
-      - name: Test nightly release checks
-        run: node --test .github/scripts/check-nightly-release.test.cjs
+      - name: Test fork automation scripts
+        run: |
+          node --test \
+            .github/scripts/apply-fork-overlay.test.cjs \
+            .github/scripts/check-nightly-release.test.cjs
 
       - name: Test
         run: vp run --parallel --concurrency-limit 4 --filter '!t3' --filter '!@t3tools/monorepo' test
