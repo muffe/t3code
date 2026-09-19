@@ -7,7 +7,10 @@ const SETTINGS_SEARCH_PATH = "apps/web/src/components/settings/settingsSearch.ts
 const CHAT_VIEW_PATH = "apps/web/src/components/ChatView.tsx";
 const DESKTOP_PRELOAD_PATH = "apps/desktop/src/preload.ts";
 const IPC_CONTRACT_PATH = "packages/contracts/src/ipc.ts";
-const SUPPORTED_PATHS = [
+const PNPM_WORKSPACE_PATH = "pnpm-workspace.yaml";
+const MSGPACKR_PLACEHOLDER = "  msgpackr-extract: set this to true or false\n";
+const MSGPACKR_FORK_FIX = "  msgpackr-extract: true\n";
+const OVERLAY_PATHS = [
   SETTINGS_SEARCH_PATH,
   CHAT_VIEW_PATH,
   DESKTOP_PRELOAD_PATH,
@@ -120,7 +123,7 @@ function applyForkOverlay(path, source) {
   throw new Error(`Cannot apply fork overlay: unsupported path ${path}.`);
 }
 
-function checkForkOverlay(root, paths = SUPPORTED_PATHS) {
+function checkForkOverlay(root, paths = OVERLAY_PATHS) {
   const drifted = [];
   for (const relativePath of paths) {
     const source = fs.readFileSync(path.join(root, relativePath), "utf8");
@@ -129,6 +132,38 @@ function checkForkOverlay(root, paths = SUPPORTED_PATHS) {
   if (drifted.length > 0) {
     throw new Error(`fork overlay drift detected:\n${drifted.join("\n")}`);
   }
+}
+
+function resolveForkConflict(relativePath, base, ours, upstream) {
+  if (relativePath === PNPM_WORKSPACE_PATH) {
+    // Retire the one-night fork fix for upstream's invalid placeholder once
+    // upstream removes that dependency from the build allowlist.
+    const expectedOurs = replaceOnce(
+      base,
+      MSGPACKR_PLACEHOLDER,
+      MSGPACKR_FORK_FIX,
+      "msgpackr build placeholder",
+    );
+    if (expectedOurs !== ours) {
+      throw new Error(
+        `Cannot apply fork overlay: ${relativePath} has fork changes outside the temporary msgpackr fix.`,
+      );
+    }
+    if (upstream.includes(MSGPACKR_PLACEHOLDER)) {
+      throw new Error(
+        `Cannot apply fork overlay: ${relativePath} still has the upstream msgpackr placeholder.`,
+      );
+    }
+    return upstream;
+  }
+
+  const expectedOurs = applyForkOverlay(relativePath, base);
+  if (expectedOurs !== ours) {
+    throw new Error(
+      `Cannot apply fork overlay: ${relativePath} has fork changes outside the fork overlay.`,
+    );
+  }
+  return applyForkOverlay(relativePath, upstream);
 }
 
 function git(root, args) {
@@ -147,7 +182,7 @@ function writeForkOverlay(root) {
     throw new Error("Cannot apply fork overlay: no unmerged paths.");
   }
   for (const relativePath of conflicted) {
-    if (!SUPPORTED_PATHS.includes(relativePath)) {
+    if (!OVERLAY_PATHS.includes(relativePath) && relativePath !== PNPM_WORKSPACE_PATH) {
       throw new Error(`Cannot apply fork overlay: unsupported path ${relativePath}.`);
     }
   }
@@ -155,13 +190,8 @@ function writeForkOverlay(root) {
   const resolved = conflicted.map((relativePath) => {
     const base = git(root, ["show", `:1:${relativePath}`]);
     const ours = git(root, ["show", `:2:${relativePath}`]);
-    if (applyForkOverlay(relativePath, base) !== ours) {
-      throw new Error(
-        `Cannot apply fork overlay: ${relativePath} has fork changes outside the fork overlay.`,
-      );
-    }
     const upstream = git(root, ["show", `:3:${relativePath}`]);
-    return [relativePath, applyForkOverlay(relativePath, upstream)];
+    return [relativePath, resolveForkConflict(relativePath, base, ours, upstream)];
   });
   for (const [relativePath, source] of resolved) {
     fs.writeFileSync(path.join(root, relativePath), source);
@@ -177,7 +207,7 @@ function writeForkOverlay(root) {
 function main(args, root) {
   const [mode, ...paths] = args;
   if (mode === "--check") {
-    checkForkOverlay(root, paths.length > 0 ? paths : SUPPORTED_PATHS);
+    checkForkOverlay(root, paths.length > 0 ? paths : OVERLAY_PATHS);
     return;
   }
   if (mode === "--write" && paths.length === 0) {

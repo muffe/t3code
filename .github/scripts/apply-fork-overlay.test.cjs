@@ -232,6 +232,41 @@ ${overlay ? "  ...FORK_SETTINGS_SEARCH_ITEMS,\n" : ""}] as const satisfies Reado
   assert.equal(git(root, "diff", "--cached", "--name-only"), `${relativePath}\n`);
 });
 
+test("--write retires the temporary msgpackr build fix when upstream removes it", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "fork-overlay-msgpackr-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const relativePath = "pnpm-workspace.yaml";
+  const absolutePath = path.join(root, relativePath);
+  const source = (msgpackrLine) => `allowBuilds:
+  electron: true
+${msgpackrLine}  sharp: true
+`;
+  git(root, "init", "-b", "main");
+  git(root, "config", "user.name", "Fork Overlay Test");
+  git(root, "config", "user.email", "fork-overlay@example.com");
+  fs.writeFileSync(absolutePath, source("  msgpackr-extract: set this to true or false\n"));
+  git(root, "add", relativePath);
+  git(root, "commit", "-m", "base");
+  git(root, "checkout", "-b", "upstream");
+  fs.writeFileSync(absolutePath, source(""));
+  git(root, "commit", "-am", "remove placeholder");
+  git(root, "checkout", "main");
+  fs.writeFileSync(absolutePath, source("  msgpackr-extract: true\n"));
+  git(root, "commit", "-am", "fix placeholder");
+  const merge = spawnSync("git", ["merge", "upstream"], { cwd: root, encoding: "utf8" });
+  assert.equal(merge.status, 1);
+
+  const result = spawnSync(process.execPath, [scriptPath, "--write"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.readFileSync(absolutePath, "utf8"), source(""));
+  assert.equal(git(root, "diff", "--name-only", "--diff-filter=U"), "");
+  assert.equal(git(root, "diff", "--cached", "--name-only"), `${relativePath}\n`);
+});
+
 test("--write refuses to discard fork changes outside the overlay", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "fork-overlay-guard-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
