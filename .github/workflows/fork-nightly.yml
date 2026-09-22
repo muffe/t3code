@@ -416,3 +416,17 @@ jobs:
           gh release upload "$RELEASE_TAG" release/*
           gh release edit "$RELEASE_TAG" --draft=false
           echo "Nightly: https://github.com/$GH_REPO/releases/tag/$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the ten newest fork nightlies
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          stale_tags="$(gh api "repos/$GH_REPO/releases?per_page=100" --paginate |
+            jq -s -r 'add | map(select(.draft == false and (.tag_name | contains("-nightly.")))) | sort_by(.published_at) | reverse | .[10:] | .[].tag_name')"
+          if [[ -n "$stale_tags" ]]; then
+            while IFS= read -r tag; do
+              gh release delete "$tag" --cleanup-tag --yes
+            done <<< "$stale_tags"
+          fi
