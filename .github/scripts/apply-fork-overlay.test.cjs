@@ -232,6 +232,54 @@ ${overlay ? "  ...FORK_SETTINGS_SEARCH_ITEMS,\n" : ""}] as const satisfies Reado
   assert.equal(git(root, "diff", "--cached", "--name-only"), `${relativePath}\n`);
 });
 
+test("--write preserves upstream edits when restoring the fork no-projects surface", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "fork-overlay-no-projects-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const relativePath = "apps/web/src/components/NoProjectsHero.tsx";
+  const absolutePath = path.join(root, relativePath);
+  fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+  git(root, "init", "-b", "main");
+  git(root, "config", "user.name", "Fork Overlay Test");
+  git(root, "config", "user.email", "fork-overlay@example.com");
+  const source = ({
+    overlay = false,
+    redundantStyles = true,
+  }) => `import { ${overlay ? "ForkNoProjectsHeroSurface" : "SidebarInset"} } from "${overlay ? "../fork/NoProjectsHero" : "./ui/sidebar"}";
+
+export function NoProjectsHero() {
+  return (
+    <${overlay ? "ForkNoProjectsHeroSurface" : "SidebarInset"} className="h-dvh${redundantStyles ? " bg-background text-foreground" : ""}">
+      Add project
+    </${overlay ? "ForkNoProjectsHeroSurface" : "SidebarInset"}>
+  );
+}
+`;
+  fs.writeFileSync(absolutePath, source({}));
+  git(root, "add", relativePath);
+  git(root, "commit", "-m", "base");
+  git(root, "checkout", "-b", "upstream");
+  fs.writeFileSync(absolutePath, source({ redundantStyles: false }));
+  git(root, "commit", "-am", "remove redundant styles");
+  git(root, "checkout", "main");
+  fs.writeFileSync(absolutePath, source({ overlay: true }));
+  git(root, "commit", "-am", "add fork surface");
+  const merge = spawnSync("git", ["merge", "upstream"], { cwd: root, encoding: "utf8" });
+  assert.equal(merge.status, 1);
+
+  const result = spawnSync(process.execPath, [scriptPath, "--write"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    fs.readFileSync(absolutePath, "utf8"),
+    source({ overlay: true, redundantStyles: false }),
+  );
+  assert.equal(git(root, "diff", "--name-only", "--diff-filter=U"), "");
+  assert.equal(git(root, "diff", "--cached", "--name-only"), `${relativePath}\n`);
+});
+
 test("--write retires the temporary msgpackr build fix when upstream removes it", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "fork-overlay-msgpackr-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

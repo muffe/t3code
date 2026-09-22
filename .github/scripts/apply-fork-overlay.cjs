@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const SETTINGS_SEARCH_PATH = "apps/web/src/components/settings/settingsSearch.ts";
 const CHAT_VIEW_PATH = "apps/web/src/components/ChatView.tsx";
+const NO_PROJECTS_HERO_PATH = "apps/web/src/components/NoProjectsHero.tsx";
 const DESKTOP_PRELOAD_PATH = "apps/desktop/src/preload.ts";
 const IPC_CONTRACT_PATH = "packages/contracts/src/ipc.ts";
 const PNPM_WORKSPACE_PATH = "pnpm-workspace.yaml";
@@ -13,6 +14,7 @@ const MSGPACKR_FORK_FIX = "  msgpackr-extract: true\n";
 const OVERLAY_PATHS = [
   SETTINGS_SEARCH_PATH,
   CHAT_VIEW_PATH,
+  NO_PROJECTS_HERO_PATH,
   DESKTOP_PRELOAD_PATH,
   IPC_CONTRACT_PATH,
 ];
@@ -79,6 +81,27 @@ function applyChatViewOverlay(source) {
   );
 }
 
+function applyNoProjectsHeroOverlay(source) {
+  const withImport = replaceOnce(
+    source,
+    'import { SidebarInset } from "./ui/sidebar";',
+    'import { ForkNoProjectsHeroSurface } from "../fork/NoProjectsHero";',
+    "no-projects surface import",
+  );
+  const withOpeningTag = replaceOnce(
+    withImport,
+    "<SidebarInset",
+    "<ForkNoProjectsHeroSurface",
+    "no-projects surface opening tag",
+  );
+  return replaceOnce(
+    withOpeningTag,
+    "</SidebarInset>",
+    "</ForkNoProjectsHeroSurface>",
+    "no-projects surface closing tag",
+  );
+}
+
 function applyDesktopPreloadOverlay(source) {
   const withImport = insertBefore(
     source,
@@ -118,6 +141,7 @@ function applyIpcContractOverlay(source) {
 function applyForkOverlay(path, source) {
   if (path === SETTINGS_SEARCH_PATH) return applySettingsSearchOverlay(source);
   if (path === CHAT_VIEW_PATH) return applyChatViewOverlay(source);
+  if (path === NO_PROJECTS_HERO_PATH) return applyNoProjectsHeroOverlay(source);
   if (path === DESKTOP_PRELOAD_PATH) return applyDesktopPreloadOverlay(source);
   if (path === IPC_CONTRACT_PATH) return applyIpcContractOverlay(source);
   throw new Error(`Cannot apply fork overlay: unsupported path ${path}.`);
