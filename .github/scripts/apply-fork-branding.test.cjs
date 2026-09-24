@@ -14,6 +14,18 @@ test("marks the desktop About version as a muffe fork build", () => {
   );
 });
 
+test("brands the About version after upstream changes its typography", () => {
+  const source = `<span>Version</span>
+      <code className="text-2xs font-medium text-muted-foreground">{APP_VERSION}</code>`;
+
+  assert.equal(
+    applyForkBranding(source),
+    `<span>Version</span>
+      <code className="text-2xs font-medium text-muted-foreground">{APP_VERSION}</code>
+      <span className="text-2xs text-muted-foreground">muffe/t3code fork</span>`,
+  );
+});
+
 test("fails loudly when upstream changes the insertion point", () => {
   assert.throws(() => applyForkBranding("<span>Version changed</span>"), /expected About copy/);
 });
