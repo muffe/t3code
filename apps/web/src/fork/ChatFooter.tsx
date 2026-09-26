@@ -10,12 +10,17 @@ import {
   limitsNotice,
   remainingPercent,
 } from "@t3tools/shared/usageLimits";
-import { useMemo, useState } from "react";
+import { refreshUsageLimits } from "@t3tools/client-runtime/state/usage";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 
 import { RedactedSensitiveText } from "../components/settings/RedactedSensitiveText";
 import { barColor } from "../components/usage/UsageLimits";
 import { useEnvironmentSettings } from "../hooks/useSettings";
 import { useEnvironment } from "../state/environments";
+import { serverEnvironment } from "../state/server";
+import { useAtomCommand } from "../state/use-atom-command";
+
+const COUNTDOWN_TICK_MS = 60_000;
 
 const EMPTY_USAGE_LIMIT_SOURCES: UsageLimitSourceSnapshots = [];
 
@@ -42,6 +47,7 @@ export function ForkChatFooter({
   return (
     <ProviderUsageLimitsBar
       key={`${environmentId}:${instanceId}`}
+      environmentId={environmentId}
       instanceId={instanceId}
       providers={serverConfig.providers}
       sources={serverConfig.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES}
@@ -49,26 +55,59 @@ export function ForkChatFooter({
   );
 }
 
-/** Reads the same provider snapshots as Limits, without polling from the composer. */
+/** Reads the same provider snapshots as Limits while the composer is visible. */
 function ProviderUsageLimitsBar({
+  environmentId,
   instanceId,
   providers,
   sources,
 }: {
+  readonly environmentId: EnvironmentId;
   readonly instanceId: ProviderInstanceId;
   readonly providers: readonly ServerProvider[];
   readonly sources: UsageLimitSourceSnapshots;
 }) {
-  const [openedAt] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
+    reportFailure: false,
+  });
+  const refresh = useEffectEvent(() => {
+    void refreshUsageLimits(
+      environmentId,
+      () => refreshProviders({ environmentId, input: {} }),
+      true,
+    );
+  });
+  useEffect(() => {
+    const visible = () => typeof document === "undefined" || document.visibilityState === "visible";
+    const tick = () => {
+      if (!visible()) return;
+      setNow(Date.now());
+      refresh();
+    };
+    tick();
+    const timer = setInterval(tick, COUNTDOWN_TICK_MS);
+    const onVisibilityChange = () => {
+      if (visible()) tick();
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
+    return () => {
+      clearInterval(timer);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
+  }, []);
   const report = useMemo(
-    () => collectProviderUsageLimits(instanceId, providers, sources, openedAt),
-    [instanceId, providers, sources, openedAt],
+    () => collectProviderUsageLimits(instanceId, providers, sources, now),
+    [instanceId, providers, sources, now],
   );
   if (!report || (report.accounts.length === 0 && report.notices.length === 0)) return null;
-  // Advance countdowns with fresh snapshots instead of running a repaint timer.
-  const now = report.accounts.reduce(
-    (latest, account) => Math.max(latest, Date.parse(account.limits.checkedAt) || openedAt),
-    openedAt,
+  const displayNow = report.accounts.reduce(
+    (latest, account) => Math.max(latest, Date.parse(account.limits.checkedAt) || now),
+    now,
   );
 
   return (
@@ -95,7 +134,7 @@ function ProviderUsageLimitsBar({
               ) : (
                 account.limits.windows.map((window) => {
                   const remaining = remainingPercent(window);
-                  const reset = formatResetsIn(window, now);
+                  const reset = formatResetsIn(window, displayNow);
                   return (
                     <span
                       key={window.id}
@@ -115,7 +154,7 @@ function ProviderUsageLimitsBar({
                         {remaining}% left
                       </span>
                       {reset ? (
-                        <span aria-label={reset} title={reset} className="tabular-nums">
+                        <span aria-label={reset} className="tabular-nums">
                           {reset.replace(/^resets in /, "in ")}
                         </span>
                       ) : null}
