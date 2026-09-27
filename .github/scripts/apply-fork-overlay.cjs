@@ -8,22 +8,22 @@ const CHAT_VIEW_PATH = "apps/web/src/components/ChatView.tsx";
 const NO_PROJECTS_HERO_PATH = "apps/web/src/components/NoProjectsHero.tsx";
 const DESKTOP_PRELOAD_PATH = "apps/desktop/src/preload.ts";
 const IPC_CONTRACT_PATH = "packages/contracts/src/ipc.ts";
-const PNPM_WORKSPACE_PATH = "pnpm-workspace.yaml";
-const MSGPACKR_PLACEHOLDER = "  msgpackr-extract: set this to true or false\n";
-const MSGPACKR_FORK_FIX = "  msgpackr-extract: true\n";
+const integrationRules = require("./fork-overlay-rules.cjs");
+const temporaryFixes = require("./fork-temporary-fixes.cjs");
 const OVERLAY_PATHS = [
   SETTINGS_SEARCH_PATH,
   CHAT_VIEW_PATH,
   NO_PROJECTS_HERO_PATH,
   DESKTOP_PRELOAD_PATH,
   IPC_CONTRACT_PATH,
+  ...Object.keys(integrationRules),
 ];
 
 function insertAfter(source, anchor, addition, description) {
   if (source.includes(addition)) return source;
   const index = source.indexOf(anchor);
-  if (index === -1) {
-    throw new Error(`Cannot apply fork overlay: missing ${description}.`);
+  if (index === -1 || source.indexOf(anchor, index + anchor.length) !== -1) {
+    throw new Error(`Cannot apply fork overlay: missing or ambiguous ${description}.`);
   }
   const insertionPoint = index + anchor.length;
   return `${source.slice(0, insertionPoint)}${addition}${source.slice(insertionPoint)}`;
@@ -32,8 +32,8 @@ function insertAfter(source, anchor, addition, description) {
 function insertBefore(source, anchor, addition, description) {
   if (source.includes(addition)) return source;
   const index = source.indexOf(anchor);
-  if (index === -1) {
-    throw new Error(`Cannot apply fork overlay: missing ${description}.`);
+  if (index === -1 || source.indexOf(anchor, index + anchor.length) !== -1) {
+    throw new Error(`Cannot apply fork overlay: missing or ambiguous ${description}.`);
   }
   return `${source.slice(0, index)}${addition}${source.slice(index)}`;
 }
@@ -41,8 +41,8 @@ function insertBefore(source, anchor, addition, description) {
 function replaceOnce(source, anchor, replacement, description) {
   if (source.includes(replacement)) return source;
   const index = source.indexOf(anchor);
-  if (index === -1) {
-    throw new Error(`Cannot apply fork overlay: missing ${description}.`);
+  if (index === -1 || source.indexOf(anchor, index + anchor.length) !== -1) {
+    throw new Error(`Cannot apply fork overlay: missing or ambiguous ${description}.`);
   }
   return `${source.slice(0, index)}${replacement}${source.slice(index + anchor.length)}`;
 }
@@ -139,6 +139,13 @@ function applyIpcContractOverlay(source) {
 }
 
 function applyForkOverlay(path, source) {
+  if (Object.hasOwn(integrationRules, path)) {
+    for (const { kind, anchor, text } of integrationRules[path]) {
+      const apply = kind === "after" ? insertAfter : kind === "before" ? insertBefore : replaceOnce;
+      source = apply(source, anchor, text, `${path} integration anchor`);
+    }
+    return source;
+  }
   if (path === SETTINGS_SEARCH_PATH) return applySettingsSearchOverlay(source);
   if (path === CHAT_VIEW_PATH) return applyChatViewOverlay(source);
   if (path === NO_PROJECTS_HERO_PATH) return applyNoProjectsHeroOverlay(source);
@@ -159,26 +166,20 @@ function checkForkOverlay(root, paths = OVERLAY_PATHS) {
 }
 
 function resolveForkConflict(relativePath, base, ours, upstream) {
-  if (relativePath === PNPM_WORKSPACE_PATH) {
-    // Retire the one-night fork fix for upstream's invalid placeholder once
-    // upstream removes that dependency from the build allowlist.
-    const expectedOurs = replaceOnce(
-      base,
-      MSGPACKR_PLACEHOLDER,
-      MSGPACKR_FORK_FIX,
-      "msgpackr build placeholder",
-    );
-    if (expectedOurs !== ours) {
-      throw new Error(
-        `Cannot apply fork overlay: ${relativePath} has fork changes outside the temporary msgpackr fix.`,
-      );
+  // A temporary fix may be retired only when it explains every fork edit and
+  // its explicit upstream behavior check passes. Never choose upstream by path alone.
+  const fixes = temporaryFixes.filter((fix) => fix.path === relativePath);
+  const withOverlay = (source) =>
+    OVERLAY_PATHS.includes(relativePath) ? applyForkOverlay(relativePath, source) : source;
+  for (const fix of fixes) {
+    if (!fix.appliesTo(base)) continue;
+    if (withOverlay(fix.apply(base)) !== ours) {
+      throw new Error(`Cannot retire ${fix.id}: fork changes outside the temporary fix.`);
     }
-    if (upstream.includes(MSGPACKR_PLACEHOLDER)) {
-      throw new Error(
-        `Cannot apply fork overlay: ${relativePath} still has the upstream msgpackr placeholder.`,
-      );
+    if (!fix.verifyUpstream(upstream)) {
+      throw new Error(`Cannot retire ${fix.id}: upstream has not satisfied its retirement check.`);
     }
-    return upstream;
+    return withOverlay(upstream);
   }
 
   const expectedOurs = applyForkOverlay(relativePath, base);
@@ -206,7 +207,10 @@ function writeForkOverlay(root) {
     throw new Error("Cannot apply fork overlay: no unmerged paths.");
   }
   for (const relativePath of conflicted) {
-    if (!OVERLAY_PATHS.includes(relativePath) && relativePath !== PNPM_WORKSPACE_PATH) {
+    if (
+      !OVERLAY_PATHS.includes(relativePath) &&
+      !temporaryFixes.some((fix) => fix.path === relativePath)
+    ) {
       throw new Error(`Cannot apply fork overlay: unsupported path ${relativePath}.`);
     }
   }
@@ -250,4 +254,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { applyForkOverlay, checkForkOverlay, writeForkOverlay };
+module.exports = { applyForkOverlay, checkForkOverlay, writeForkOverlay, resolveForkConflict };

@@ -41,6 +41,9 @@ jobs:
           sparse-checkout-cone-mode: false
           ssh-key: ${{ secrets.FORK_SYNC_SSH_KEY }}
 
+      - name: Verify fork merge rules
+        run: node --test .github/scripts/apply-fork-overlay.test.cjs
+
       - name: Merge upstream and select build
         id: sync
         env:

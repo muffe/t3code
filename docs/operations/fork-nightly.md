@@ -18,6 +18,26 @@ the candidate branch remains available for inspection. GitHub's scheduled runs
 may be delayed, and inactive public forks can have schedules disabled after 60
 days.
 
+## Maintaining fork changes
+
+Keep feature implementations in fork-owned files and register edits to shared
+integration points in `.github/scripts/fork-overlay-rules.cjs`. The sync job
+tests the resolver before merging, then checks the merged tree for overlay drift.
+Anchors must be unique; missing or ambiguous anchors and unregistered fork edits
+stop the merge. The integration tests use pinned historical Git blobs, so run
+them from a checkout with full history, as the nightly does.
+
+Temporary upstream bug fixes belong in `.github/scripts/fork-temporary-fixes.cjs`.
+Each rule needs an identifier, affected path, a predicate identifying the broken
+base, the exact fork transformation, and an explicit upstream retirement check.
+Register a rule only with a focused behavior regression test and merge fixtures
+showing both accepted retirement and refusal of an unfixed upstream or unrelated
+fork edits. The resolver accepts upstream only when the rule accounts for every
+fork edit and the retirement check passes. This is intentionally conservative:
+equivalence that cannot be checked reliably still requires a manual merge.
+After retirement has been merged, remove the obsolete rule in a later cleanup;
+do not accumulate permanent exceptions for historical conflicts.
+
 ## Initial setup
 
 The workflow must be on the default branch, `main`, with Actions enabled. Add a

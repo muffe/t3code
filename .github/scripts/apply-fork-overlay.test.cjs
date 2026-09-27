@@ -164,7 +164,7 @@ test("rejects unsupported conflicts and recognizable files with missing anchors"
   );
   assert.throws(
     () => applyForkOverlay("apps/desktop/src/preload.ts", ""),
-    /missing desktop IPC imports/,
+    /missing or ambiguous desktop IPC imports/,
   );
 });
 
@@ -353,4 +353,128 @@ ${overlay ? "  ...FORK_SETTINGS_SEARCH_ITEMS,\n" : ""}] as const satisfies Reado
   assert.equal(result.status, 1);
   assert.match(result.stderr, /outside the fork overlay/);
   assert.equal(git(root, "diff", "--name-only", "--diff-filter=U"), `${relativePath}\n`);
+});
+
+const integrationRules = require("./fork-overlay-rules.cjs");
+const temporaryFixes = require("./fork-temporary-fixes.cjs");
+const { resolveForkConflict } = require("./apply-fork-overlay.cjs");
+const repoRoot = path.resolve(__dirname, "../..");
+// Pinned upstream source exercises real integration locations, independent of
+// the rule definitions. This commit is an ancestor of the fork's main branch.
+const upstreamFixture = "a727d1d97690c9bb12cee5760e91cfd1aa7c017d";
+
+for (const relativePath of Object.keys(integrationRules)) {
+  test(`--write preserves upstream edits in ${relativePath}`, (t) => {
+    const base = git(repoRoot, "show", `${upstreamFixture}:${relativePath}`);
+    const ours = git(repoRoot, "show", `e8eddd930:${relativePath}`);
+    assert.equal(applyForkOverlay(relativePath, base), ours);
+    assert.equal(applyForkOverlay(relativePath, ours), ours);
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fork-integration-"));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const file = path.join(root, relativePath);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    git(root, "init", "-b", "main");
+    git(root, "config", "user.name", "Fork Overlay Test");
+    git(root, "config", "user.email", "fork-overlay@example.com");
+    fs.writeFileSync(file, base);
+    git(root, "add", relativePath);
+    git(root, "commit", "-m", "base");
+    git(root, "checkout", "-b", "upstream");
+    // Competing edits to the first line force a real conflict. All integration
+    // points below it must survive when the upstream file is reconstructed.
+    const upstream = `// upstream change\n${base}`;
+    fs.writeFileSync(file, upstream);
+    git(root, "commit", "-am", "upstream change");
+    git(root, "checkout", "main");
+    fs.writeFileSync(file, `// unexpected fork change\n${ours}`);
+    git(root, "commit", "-am", "fork integration plus unregistered edit");
+    assert.equal(spawnSync("git", ["merge", "upstream"], { cwd: root }).status, 1);
+    const rejected = spawnSync(process.execPath, [scriptPath, "--write"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    assert.equal(rejected.status, 1);
+    assert.match(rejected.stderr, /outside the fork overlay/);
+    assert.notEqual(git(root, "diff", "--name-only", "--diff-filter=U"), "");
+
+    // Supply the genuine fork side of the same unmerged index to test recovery.
+    const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], {
+      cwd: root,
+      input: ours,
+      encoding: "utf8",
+    }).trim();
+    execFileSync("git", ["update-index", "--index-info"], {
+      cwd: root,
+      input: `100644 ${blob} 2\t${relativePath}\n`,
+    });
+    const result = spawnSync(process.execPath, [scriptPath, "--write"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(file, "utf8"), `// upstream change\n${ours}`);
+    assert.equal(git(root, "diff", "--name-only", "--diff-filter=U"), "");
+  });
+}
+
+test("rejects ambiguous integration anchors", () => {
+  const source = 'import * as IpcChannels from "./ipc/channels.ts";\n';
+  assert.throws(
+    () => applyForkOverlay("apps/desktop/src/preload.ts", source + source),
+    /ambiguous/,
+  );
+});
+
+test("temporary fix retirement requires both the exact fork delta and an upstream fix", () => {
+  const fix = temporaryFixes.find((fix) => fix.id === "msgpackr-build-placeholder");
+  const base = "allowBuilds:\n  msgpackr-extract: set this to true or false\n  electron: true\n";
+  const ours = fix.apply(base);
+  const upstream = "allowBuilds:\n  electron: true\n  sharp: true\n";
+  assert.equal(resolveForkConflict(fix.path, base, ours, upstream), upstream);
+  for (const value of ["set this to true or false", "maybe", "false", "true"]) {
+    const notRetired = `allowBuilds:\n  msgpackr-extract: ${value}\n`;
+    assert.throws(() => resolveForkConflict(fix.path, base, ours, notRetired), /retirement check/);
+  }
+  assert.throws(
+    () => resolveForkConflict(fix.path, base, `${ours}extra: true\n`, upstream),
+    /outside the temporary fix/,
+  );
+  assert.throws(
+    () => resolveForkConflict(fix.path, "unrecognized base", ours, upstream),
+    /unsupported path/,
+  );
+});
+
+test("retiring a temporary fix preserves a permanent overlay in the same file", () => {
+  const relativePath = "apps/desktop/src/preload.ts";
+  const base = `import * as IpcChannels from "./ipc/channels.ts";
+const temporaryValue = "broken";
+const bridge = {
+  pasteAsText: () => {},
+};
+`;
+  const fix = {
+    id: "test-only-preload-fix",
+    path: relativePath,
+    appliesTo: (source) => source.includes('temporaryValue = "broken"'),
+    apply: (source) => source.replace('temporaryValue = "broken"', 'temporaryValue = "fork-fix"'),
+    verifyUpstream: (source) => source.includes('temporaryValue = "upstream-fix"'),
+  };
+  temporaryFixes.push(fix);
+  try {
+    const ours = applyForkOverlay(relativePath, fix.apply(base));
+    const upstream = base.replace('temporaryValue = "broken"', 'temporaryValue = "upstream-fix"');
+    assert.equal(
+      resolveForkConflict(relativePath, base, ours, upstream),
+      applyForkOverlay(relativePath, upstream),
+    );
+    assert.throws(() => resolveForkConflict(relativePath, base, ours, base), /retirement check/);
+    assert.throws(
+      () => resolveForkConflict(relativePath, base, ours + "// unknown fork edit", upstream),
+      /outside the temporary fix/,
+    );
+  } finally {
+    temporaryFixes.pop();
+  }
 });
