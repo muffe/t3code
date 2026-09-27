@@ -3299,13 +3299,13 @@ export const validateWindowsPackagedPayload = Effect.fn(
     }
     const requiredMembers = [`${stem}/t3`, `${stem}/client`, `${stem}/node_modules`];
     const missingMembers = requiredMembers.filter((member) => !members.includes(member));
-    // node-pty uses the matching prebuild when available, otherwise it builds from source.
-    const ptyMembers = [
+    // node-pty can load a source build or the prebuild for the WSL target.
+    const ptyCandidates = [
       `${stem}/node_modules/node-pty/build/Release/pty.node`,
       `${stem}/node_modules/node-pty/prebuilds/linux-${input.targetArch}/pty.node`,
     ];
-    if (!ptyMembers.some((member) => members.includes(member))) {
-      missingMembers.push(...ptyMembers);
+    if (!ptyCandidates.some((member) => members.includes(member))) {
+      missingMembers.push(...ptyCandidates);
     }
     if (missingMembers.length > 0) {
       return yield* new WindowsPackagedPayloadValidationError({
