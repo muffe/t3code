@@ -1,7 +1,7 @@
 # Personal desktop nightlies
 
 The `Fork Desktop Nightly` workflow merges `pingdotgg/t3code:main` into this
-fork every four hours at 23 minutes past the hour. It builds Windows x64 and
+fork daily at 08:23 UTC. It builds Windows x64 and
 macOS arm64 when the source differs from the last published nightly. Run it
 manually from GitHub Actions for an immediate build; select **force** to rebuild
 unchanged source.

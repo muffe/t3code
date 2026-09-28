@@ -2,7 +2,8 @@ name: Fork Desktop Nightly
 
 on:
   schedule:
-    - cron: "23 */4 * * *"
+    # 00:23 PST / 01:23 PDT, after late upstream commits.
+    - cron: "23 8 * * *"
   workflow_dispatch:
     inputs:
       force:
