@@ -146,6 +146,28 @@ export interface DesktopBridge extends ForkDesktopBridge {
   );
 });
 
+test("desktop bridge export anchor stays unique beside its schema type", () => {
+  const upstream = `import type {
+  DesktopAppActivationRequest,
+} from "./desktopAppActivation.ts";
+
+export interface ContextMenuItem<T extends string = string> {
+  id: T;
+}
+export interface ContextMenuItemSchemaType {
+  id: string;
+}
+export interface DesktopBridge {
+  openExternal: (url: string) => Promise<boolean>;
+}
+`;
+
+  assert.match(
+    applyForkOverlay("packages/contracts/src/ipc.ts", upstream),
+    /export \* from "\.\/forkDesktop\.ts";\n\nexport interface ContextMenuItem</,
+  );
+});
+
 test("applying an overlay twice is a no-op", () => {
   const upstream = `import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
 
@@ -189,6 +211,58 @@ export const SETTINGS_SEARCH_ITEMS = [
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /fork overlay drift/);
+});
+
+test("--audit accepts declared fork edits and rejects cleanly merged extras", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "fork-overlay-audit-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const relativePath = "apps/web/src/components/settings/settingsSearch.ts";
+  const sourcePath = path.join(root, relativePath);
+  const source = `import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
+
+export const SETTINGS_SEARCH_ITEMS = [
+] as const satisfies ReadonlyArray<SettingsSearchItem>;
+`;
+  fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+  git(root, "init", "-b", "main");
+  git(root, "config", "user.name", "Fork Overlay Test");
+  git(root, "config", "user.email", "fork-overlay@example.com");
+  fs.writeFileSync(sourcePath, source);
+  fs.writeFileSync(path.join(root, "shared.txt"), "upstream\n");
+  fs.writeFileSync(
+    path.join(root, "pnpm-workspace.yaml"),
+    "  msgpackr-extract: set this to true or false\n",
+  );
+  fs.writeFileSync(path.join(root, "AGENTS.md"), "upstream policy\n");
+  git(root, "add", ".");
+  git(root, "commit", "-m", "upstream");
+  const upstreamRef = git(root, "rev-parse", "HEAD").trim();
+
+  fs.writeFileSync(sourcePath, applyForkOverlay(relativePath, source));
+  fs.writeFileSync(path.join(root, "fork-owned.txt"), "fork feature\n");
+  fs.writeFileSync(path.join(root, "pnpm-workspace.yaml"), "  msgpackr-extract: true\n");
+  fs.writeFileSync(path.join(root, "AGENTS.md"), "fork policy\n");
+  git(root, "add", ".");
+  git(root, "commit", "-m", "declared fork changes");
+  const audit = () =>
+    spawnSync(process.execPath, [scriptPath, "--audit", upstreamRef], {
+      cwd: root,
+      encoding: "utf8",
+    });
+  assert.equal(audit().status, 0);
+
+  fs.appendFileSync(sourcePath, "// unregistered edit\n");
+  git(root, "commit", "-am", "extra overlay edit");
+  const extraOverlay = audit();
+  assert.equal(extraOverlay.status, 1);
+  assert.match(extraOverlay.stderr, /unregistered fork changes.*settingsSearch\.ts/s);
+
+  git(root, "reset", "--hard", "HEAD~1");
+  fs.writeFileSync(path.join(root, "shared.txt"), "fork edit\n");
+  git(root, "commit", "-am", "unknown shared edit");
+  const unknownPath = audit();
+  assert.equal(unknownPath.status, 1);
+  assert.match(unknownPath.stderr, /unregistered fork changes.*shared\.txt/s);
 });
 
 test("--write resolves a known conflict from upstream and stages the result", (t) => {

@@ -29,12 +29,16 @@ function applyForkBranding(source) {
   return source.replace(versionLine, `${versionLine}\n${forkLabel}`);
 }
 
-function main() {
+function main(args = []) {
+  if (args.length > 1 || (args.length === 1 && args[0] !== "--check")) {
+    throw new Error("Usage: apply-fork-branding.cjs [--check]");
+  }
   const sourcePath = resolve(SETTINGS_SOURCE);
   const source = readFileSync(sourcePath, "utf8");
-  writeFileSync(sourcePath, applyForkBranding(source));
+  const branded = applyForkBranding(source);
+  if (args[0] !== "--check") writeFileSync(sourcePath, branded);
 }
 
-if (require.main === module) main();
+if (require.main === module) main(process.argv.slice(2));
 
 module.exports = { applyForkBranding };

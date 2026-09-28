@@ -22,10 +22,14 @@ days.
 
 Keep feature implementations in fork-owned files and register edits to shared
 integration points in `.github/scripts/fork-overlay-rules.cjs`. The sync job
-tests the resolver before merging, then checks the merged tree for overlay drift.
-Anchors must be unique; missing or ambiguous anchors and unregistered fork edits
-stop the merge. The integration tests use pinned historical Git blobs, so run
-them from a checkout with full history, as the nightly does.
+tests the resolver before merging, then checks the merged tree against the fresh
+upstream commit. Anchors must be unique; missing or ambiguous anchors and
+unregistered fork edits in upstream-owned files stop the merge, even when Git
+merged them cleanly. Fork policy in `AGENTS.md` and fork CI wiring in
+`.github/workflows/ci.yml` remain direct edits. The sync also checks fork
+branding before starting platform builds. The integration tests use pinned
+historical Git blobs, so run them from a checkout with full history, as the
+nightly does.
 
 Temporary upstream bug fixes belong in `.github/scripts/fork-temporary-fixes.cjs`.
 Each rule needs an identifier, affected path, a predicate identifying the broken

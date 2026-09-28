@@ -10,6 +10,8 @@ const DESKTOP_PRELOAD_PATH = "apps/desktop/src/preload.ts";
 const IPC_CONTRACT_PATH = "packages/contracts/src/ipc.ts";
 const integrationRules = require("./fork-overlay-rules.cjs");
 const temporaryFixes = require("./fork-temporary-fixes.cjs");
+// Fork policy and CI wiring are maintained directly instead of as source overlays.
+const FORK_POLICY_PATHS = new Set([".github/workflows/ci.yml", "AGENTS.md"]);
 const OVERLAY_PATHS = [
   SETTINGS_SEARCH_PATH,
   CHAT_VIEW_PATH,
@@ -126,7 +128,7 @@ function applyIpcContractOverlay(source) {
   );
   const withExport = insertBefore(
     withImport,
-    "export interface ContextMenuItem",
+    "export interface ContextMenuItem<T extends string = string> {",
     'export * from "./forkDesktop.ts";\n\n',
     "context menu contract",
   );
@@ -199,6 +201,40 @@ function git(root, args) {
   });
 }
 
+function auditForkDelta(root, upstreamRef) {
+  const changedPaths = git(root, [
+    "diff",
+    "--no-renames",
+    "--name-only",
+    "--diff-filter=MDT",
+    "-z",
+    upstreamRef,
+    "HEAD",
+  ])
+    .split("\0")
+    .filter(Boolean);
+  const unexpected = [];
+  for (const relativePath of changedPaths) {
+    if (FORK_POLICY_PATHS.has(relativePath)) continue;
+    const hasOverlay = OVERLAY_PATHS.includes(relativePath);
+    const fixes = temporaryFixes.filter((candidate) => candidate.path === relativePath);
+    if (!hasOverlay && fixes.length === 0) {
+      unexpected.push(relativePath);
+      continue;
+    }
+    const upstream = git(root, ["show", `${upstreamRef}:${relativePath}`]);
+    const actualPath = path.join(root, relativePath);
+    const actual = fs.existsSync(actualPath) ? fs.readFileSync(actualPath, "utf8") : null;
+    const fix = fixes.find((candidate) => candidate.appliesTo(upstream));
+    let expected = fix ? fix.apply(upstream) : upstream;
+    if (hasOverlay) expected = applyForkOverlay(relativePath, expected);
+    if (actual !== expected) unexpected.push(relativePath);
+  }
+  if (unexpected.length > 0) {
+    throw new Error(`unregistered fork changes in upstream-owned files:\n${unexpected.join("\n")}`);
+  }
+}
+
 function writeForkOverlay(root) {
   const conflicted = git(root, ["diff", "--name-only", "--diff-filter=U", "-z"])
     .split("\0")
@@ -238,11 +274,17 @@ function main(args, root) {
     checkForkOverlay(root, paths.length > 0 ? paths : OVERLAY_PATHS);
     return;
   }
+  if (mode === "--audit" && paths.length === 1) {
+    auditForkDelta(root, paths[0]);
+    return;
+  }
   if (mode === "--write" && paths.length === 0) {
     writeForkOverlay(root);
     return;
   }
-  throw new Error("Usage: apply-fork-overlay.cjs --check [path ...] | --write");
+  throw new Error(
+    "Usage: apply-fork-overlay.cjs --check [path ...] | --audit <upstream-ref> | --write",
+  );
 }
 
 if (require.main === module) {
@@ -254,4 +296,10 @@ if (require.main === module) {
   }
 }
 
-module.exports = { applyForkOverlay, checkForkOverlay, writeForkOverlay, resolveForkConflict };
+module.exports = {
+  applyForkOverlay,
+  auditForkDelta,
+  checkForkOverlay,
+  writeForkOverlay,
+  resolveForkConflict,
+};

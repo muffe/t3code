@@ -41,8 +41,8 @@ jobs:
           sparse-checkout-cone-mode: false
           ssh-key: ${{ secrets.FORK_SYNC_SSH_KEY }}
 
-      - name: Verify fork merge rules
-        run: node --test .github/scripts/apply-fork-overlay.test.cjs
+      - name: Verify fork integration rules
+        run: node --test .github/scripts/apply-fork-overlay.test.cjs .github/scripts/apply-fork-branding.test.cjs
 
       - name: Merge upstream and select build
         id: sync
@@ -56,7 +56,8 @@ jobs:
           base_sha="$(git rev-parse HEAD)"
           echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
           git fetch --no-tags https://github.com/pingdotgg/t3code.git main
-          if ! git merge --no-ff -m "Merge upstream main [skip ci]" FETCH_HEAD; then
+          upstream_sha="$(git rev-parse FETCH_HEAD)"
+          if ! git merge --no-ff -m "Merge upstream main [skip ci]" "$upstream_sha"; then
             if ! node .github/scripts/apply-fork-overlay.cjs --write; then
               git merge --abort
               echo "::error::Upstream has an unknown fork conflict. Resolve the merge locally and rerun this workflow."
@@ -65,6 +66,8 @@ jobs:
             git commit --no-edit
           fi
           node .github/scripts/apply-fork-overlay.cjs --check
+          node .github/scripts/apply-fork-overlay.cjs --audit "$upstream_sha"
+          node .github/scripts/apply-fork-branding.cjs --check
           sha="$(git rev-parse HEAD)"
           last_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[] | select(.prerelease and (.draft | not) and (.tag_name | contains("-nightly.")))][0].tag_name // ""')"
           echo "previous_tag=$last_tag" >> "$GITHUB_OUTPUT"
