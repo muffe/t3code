@@ -42,6 +42,11 @@ jobs:
           sparse-checkout-cone-mode: false
           ssh-key: ${{ secrets.FORK_SYNC_SSH_KEY }}
 
+      - name: Use HTTPS for reads and deploy key for pushes
+        run: |
+          git remote set-url --push origin "git@github.com:$GITHUB_REPOSITORY.git"
+          git remote set-url origin "https://github.com/$GITHUB_REPOSITORY.git"
+
       - name: Verify fork integration rules
         run: node --test .github/scripts/apply-fork-overlay.test.cjs .github/scripts/apply-fork-branding.test.cjs
 
@@ -381,6 +386,11 @@ jobs:
           fetch-depth: 0
           sparse-checkout: .github
           ssh-key: ${{ secrets.FORK_SYNC_SSH_KEY }}
+
+      - name: Use HTTPS for reads and deploy key for pushes
+        run: |
+          git remote set-url --push origin "git@github.com:$GITHUB_REPOSITORY.git"
+          git remote set-url origin "https://github.com/$GITHUB_REPOSITORY.git"
 
       - uses: actions/download-artifact@v8
         with:
