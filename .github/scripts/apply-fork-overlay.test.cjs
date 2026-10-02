@@ -437,10 +437,30 @@ const repoRoot = path.resolve(__dirname, "../..");
 // the rule definitions. This commit is an ancestor of the fork's main branch.
 const upstreamFixture = "a727d1d97690c9bb12cee5760e91cfd1aa7c017d";
 
+// Keep the historical fixture independent of the current rule definitions,
+// but remove the desktop attention integration retired in favor of upstream.
+const retiredAttentionFixtureEdits = {
+  "apps/web/src/components/settings/SettingsPanels.tsx": [
+    "  const changedForkSettingLabels = ForkSettings.getChangedForkSettingLabels(settings);\n",
+    "      ...changedForkSettingLabels,\n",
+    "      changedForkSettingLabels,\n",
+    "      ...ForkSettings.FORK_SETTINGS_DEFAULTS,\n",
+    "      {isElectron ? <ForkSettings.ForkDesktopAttentionSettingsSection /> : null}\n\n",
+  ],
+  "packages/contracts/src/settings.ts": [
+    "  ...ForkSettings.FORK_DESKTOP_SETTINGS_FIELDS,\n",
+    "  ...ForkSettings.FORK_DESKTOP_SETTINGS_PATCH_FIELDS,\n",
+  ],
+};
+
 for (const relativePath of Object.keys(integrationRules)) {
   test(`--write preserves upstream edits in ${relativePath}`, (t) => {
     const base = git(repoRoot, "show", `${upstreamFixture}:${relativePath}`);
-    const ours = git(repoRoot, "show", `e8eddd930:${relativePath}`);
+    let ours = git(repoRoot, "show", `e8eddd930:${relativePath}`);
+    for (const edit of retiredAttentionFixtureEdits[relativePath] ?? []) {
+      assert.equal(ours.split(edit).length, 2);
+      ours = ours.replace(edit, "");
+    }
     assert.equal(applyForkOverlay(relativePath, base), ours);
     assert.equal(applyForkOverlay(relativePath, ours), ours);
 

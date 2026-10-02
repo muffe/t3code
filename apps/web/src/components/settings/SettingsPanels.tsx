@@ -527,7 +527,6 @@ export function useSettingsRestore(onRestored?: () => void) {
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
   const isBackgroundActivityDirty = hasChangedBackgroundActivitySettings(settings);
-  const changedForkSettingLabels = ForkSettings.getChangedForkSettingLabels(settings);
 
   const changedSettingLabels = useMemo(
     () => [
@@ -636,7 +635,6 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["Delete confirmation"]
         : []),
       ...(settings.confirmQuit !== DEFAULT_UNIFIED_SETTINGS.confirmQuit ? ["Quit shortcut"] : []),
-      ...changedForkSettingLabels,
       ...(isTextGenerationModelDirty ? ["Text generation model"] : []),
       ...getChangedBrowserSettingLabels(settings),
       ...(settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess
@@ -659,7 +657,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.chatWidth,
       settings.enableAgentBrowserAccess,
       settings.confirmQuit,
-      changedForkSettingLabels,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
       settings.confirmThreadUnpin,
@@ -807,7 +804,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
       confirmThreadUnpin: DEFAULT_UNIFIED_SETTINGS.confirmThreadUnpin,
       confirmQuit: DEFAULT_UNIFIED_SETTINGS.confirmQuit,
-      ...ForkSettings.FORK_SETTINGS_DEFAULTS,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
       fontFamilySans: DEFAULT_UNIFIED_SETTINGS.fontFamilySans,
       fontFamilyComposer: DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer,
@@ -2973,8 +2969,6 @@ export function GeneralSettingsPanel() {
           }
         />
       </SettingsSection>
-
-      {isElectron ? <ForkSettings.ForkDesktopAttentionSettingsSection /> : null}
 
       <SettingsSection id="projects-and-threads" title="Projects & threads">
         <SettingsRow

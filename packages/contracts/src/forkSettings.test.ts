@@ -6,22 +6,38 @@ import { ClientSettingsPatch, ClientSettingsSchema } from "./settings.ts";
 const decodeClientSettings = Schema.decodeUnknownSync(ClientSettingsSchema);
 const decodeClientSettingsPatch = Schema.decodeUnknownSync(ClientSettingsPatch);
 
-describe("ClientSettings desktop attention", () => {
-  it("disables native attention signals by default", () => {
-    const settings = decodeClientSettings({});
-    expect(settings.desktopNotificationsEnabled).toBe(false);
-    expect(settings.desktopAttentionBadgeEnabled).toBe(false);
+describe("ClientSettings fork preferences", () => {
+  it("shows usage limits by default and accepts a patch to hide them", () => {
+    expect(decodeClientSettings({}).showUsageLimitsBar).toBe(true);
+    expect(decodeClientSettingsPatch({ showUsageLimitsBar: false })).toMatchObject({
+      showUsageLimitsBar: false,
+    });
   });
 
-  it("accepts explicit opt-in desktop attention patches", () => {
-    expect(
-      decodeClientSettingsPatch({
+  it.each(["off", "notifications", "sound", "notifications-and-sound"] as const)(
+    "discards retired desktop attention settings and preserves notification mode %s",
+    (notificationMode) => {
+      const settings = decodeClientSettings({
+        notificationMode,
         desktopNotificationsEnabled: true,
         desktopAttentionBadgeEnabled: true,
-      }),
-    ).toMatchObject({
+        showUsageLimitsBar: false,
+      });
+
+      expect(settings.notificationMode).toBe(notificationMode);
+      expect(settings.showUsageLimitsBar).toBe(false);
+      expect(settings).not.toHaveProperty("desktopNotificationsEnabled");
+      expect(settings).not.toHaveProperty("desktopAttentionBadgeEnabled");
+    },
+  );
+
+  it("drops retired desktop attention patches", () => {
+    const patch = decodeClientSettingsPatch({
       desktopNotificationsEnabled: true,
       desktopAttentionBadgeEnabled: true,
     });
+
+    expect(patch).not.toHaveProperty("desktopNotificationsEnabled");
+    expect(patch).not.toHaveProperty("desktopAttentionBadgeEnabled");
   });
 });
