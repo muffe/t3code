@@ -2,8 +2,8 @@ name: Fork Desktop Nightly
 
 on:
   schedule:
-    # 00:23 PST / 01:23 PDT, after late upstream commits.
-    - cron: "23 8 * * *"
+    # Every eight hours at 00:23, 08:23, and 16:23 UTC, away from the top-of-hour rush.
+    - cron: "23 0,8,16 * * *"
   workflow_dispatch:
     inputs:
       force:
