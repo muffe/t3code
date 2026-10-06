@@ -8,8 +8,12 @@ unchanged source.
 
 Keep personal changes on this fork's `main`. Sync creates a normal merge on the
 temporary `fork-nightly-candidate` branch and rebuilds the fork's small,
-documented integration points on top of the upstream versions. Unknown conflicts
-still fail loudly and require a local merge. So do known files with fork changes
+documented integration points on top of the upstream versions. The root
+`README.md` belongs to the fork: sync restores it from the pre-merge fork commit
+before committing the merge, even when upstream edits merge cleanly or delete
+the file. README conflicts keep the fork version; upstream README content is
+never adopted. Unknown conflicts still fail loudly and require a local merge.
+So do known files with fork changes
 outside the declared overlay, preventing the resolver from silently discarding
 new work. The workflow promotes the tested commit to `main` only after every
 platform build succeeds, and only if `main` has not moved in the meantime. A

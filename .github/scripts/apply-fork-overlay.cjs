@@ -12,6 +12,8 @@ const integrationRules = require("./fork-overlay-rules.cjs");
 const temporaryFixes = require("./fork-temporary-fixes.cjs");
 // Fork policy and CI wiring are maintained directly instead of as source overlays.
 const FORK_POLICY_PATHS = new Set([".github/workflows/ci.yml", "AGENTS.md"]);
+// The fork README is kept in full, even when upstream edits merge cleanly.
+const FORK_README_PATH = "README.md";
 const OVERLAY_PATHS = [
   SETTINGS_SEARCH_PATH,
   CHAT_VIEW_PATH,
@@ -215,7 +217,7 @@ function auditForkDelta(root, upstreamRef) {
     .filter(Boolean);
   const unexpected = [];
   for (const relativePath of changedPaths) {
-    if (FORK_POLICY_PATHS.has(relativePath)) continue;
+    if (FORK_POLICY_PATHS.has(relativePath) || relativePath === FORK_README_PATH) continue;
     const hasOverlay = OVERLAY_PATHS.includes(relativePath);
     const fixes = temporaryFixes.filter((candidate) => candidate.path === relativePath);
     if (!hasOverlay && fixes.length === 0) {
@@ -244,6 +246,7 @@ function writeForkOverlay(root) {
   }
   for (const relativePath of conflicted) {
     if (
+      relativePath !== FORK_README_PATH &&
       !OVERLAY_PATHS.includes(relativePath) &&
       !temporaryFixes.some((fix) => fix.path === relativePath)
     ) {
@@ -252,6 +255,9 @@ function writeForkOverlay(root) {
   }
 
   const resolved = conflicted.map((relativePath) => {
+    if (relativePath === FORK_README_PATH) {
+      return [relativePath, git(root, ["show", `:2:${relativePath}`])];
+    }
     const base = git(root, ["show", `:1:${relativePath}`]);
     const ours = git(root, ["show", `:2:${relativePath}`]);
     const upstream = git(root, ["show", `:3:${relativePath}`]);

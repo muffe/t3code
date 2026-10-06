@@ -306,6 +306,119 @@ ${overlay ? "  ...FORK_SETTINGS_SEARCH_ITEMS,\n" : ""}] as const satisfies Reado
   assert.equal(git(root, "diff", "--cached", "--name-only"), `${relativePath}\n`);
 });
 
+const nightlyWorkflow = fs.readFileSync(
+  path.join(__dirname, "../workflows/fork-nightly.yml"),
+  "utf8",
+);
+// Exercise the workflow's actual merge block so a clean merge cannot bypass preservation.
+const nightlyMergeBlock = nightlyWorkflow
+  .match(/^ {10}(if ! git merge --no-ff[\s\S]*?)(?=^ {10}node .* --check)/m)[1]
+  .replaceAll(
+    "node .github/scripts/apply-fork-overlay.cjs",
+    '"$FORK_OVERLAY_NODE" "$FORK_OVERLAY_SCRIPT"',
+  );
+
+const baseReadme = `# T3 Code\n\n${"Shared documentation.\n".repeat(12)}\nOriginal install instructions.\n`;
+const forkReadme = baseReadme.replace("# T3 Code", "# T3 Code · personal fork");
+
+for (const { name, ours, upstream, mergeFails } of [
+  {
+    name: "conflicting upstream README edits",
+    ours: forkReadme,
+    upstream: baseReadme.replace("# T3 Code", "# Official T3 Code"),
+    mergeFails: true,
+  },
+  {
+    name: "cleanly merged upstream README edits",
+    ours: forkReadme,
+    upstream: baseReadme.replace(
+      "Original install instructions.",
+      "New upstream install instructions.",
+    ),
+    mergeFails: false,
+  },
+  {
+    name: "upstream-only README edits",
+    ours: baseReadme,
+    upstream: baseReadme.replace(
+      "Original install instructions.",
+      "New upstream install instructions.",
+    ),
+    mergeFails: false,
+  },
+  {
+    name: "upstream README deletion with a modified fork README",
+    ours: forkReadme,
+    upstream: null,
+    mergeFails: true,
+  },
+  {
+    name: "clean upstream README deletion",
+    ours: baseReadme,
+    upstream: null,
+    mergeFails: false,
+  },
+]) {
+  test(`nightly sync preserves the fork README after ${name}`, (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fork-readme-sync-"));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const readmePath = path.join(root, "README.md");
+    git(root, "init", "-b", "main");
+    git(root, "config", "user.name", "Fork Overlay Test");
+    git(root, "config", "user.email", "fork-overlay@example.com");
+    fs.writeFileSync(readmePath, baseReadme);
+    fs.writeFileSync(path.join(root, "shared.txt"), "base\n");
+    git(root, "add", ".");
+    git(root, "commit", "-m", "base");
+    git(root, "checkout", "-b", "upstream");
+    if (upstream === null) fs.unlinkSync(readmePath);
+    else fs.writeFileSync(readmePath, upstream);
+    fs.writeFileSync(path.join(root, "shared.txt"), "upstream improvement\n");
+    git(root, "commit", "-am", "upstream changes");
+    const upstreamRef = git(root, "rev-parse", "HEAD").trim();
+    git(root, "checkout", "main");
+    fs.writeFileSync(readmePath, ours);
+    fs.writeFileSync(path.join(root, "fork-owned.txt"), "fork feature\n");
+    git(root, "add", ".");
+    git(root, "commit", "-m", "fork changes");
+    const forkRef = git(root, "rev-parse", "HEAD").trim();
+    const sync = () =>
+      spawnSync("bash", ["-c", `set -euo pipefail\n${nightlyMergeBlock}`], {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          base_sha: forkRef,
+          upstream_sha: upstreamRef,
+          FORK_OVERLAY_NODE: process.execPath,
+          FORK_OVERLAY_SCRIPT: scriptPath,
+        },
+      });
+
+    const result = sync();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.includes("CONFLICT"), mergeFails);
+    const mergedRef = git(root, "rev-parse", "HEAD").trim();
+    assert.equal(git(root, "show", "HEAD:README.md"), ours);
+    assert.equal(fs.readFileSync(readmePath, "utf8"), ours);
+    assert.equal(git(root, "show", "HEAD:shared.txt"), "upstream improvement\n");
+    assert.equal(git(root, "rev-parse", "HEAD^1").trim(), forkRef);
+    assert.equal(git(root, "rev-parse", "HEAD^2").trim(), upstreamRef);
+    assert.equal(git(root, "status", "--porcelain"), "");
+    const audit = spawnSync(process.execPath, [scriptPath, "--audit", upstreamRef], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    assert.equal(audit.status, 0, audit.stderr);
+
+    // Running sync again with the same upstream must not create another commit.
+    const repeated = sync();
+    assert.equal(repeated.status, 0, repeated.stderr);
+    assert.equal(git(root, "rev-parse", "HEAD").trim(), mergedRef);
+    assert.equal(git(root, "status", "--porcelain"), "");
+  });
+}
+
 test("--write preserves upstream edits when restoring the fork no-projects surface", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "fork-overlay-no-projects-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

@@ -63,12 +63,15 @@ jobs:
           echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
           git fetch --no-tags https://github.com/pingdotgg/t3code.git main
           upstream_sha="$(git rev-parse FETCH_HEAD)"
-          if ! git merge --no-ff -m "Merge upstream main [skip ci]" "$upstream_sha"; then
+          if ! git merge --no-ff --no-commit -m "Merge upstream main [skip ci]" "$upstream_sha"; then
             if ! node .github/scripts/apply-fork-overlay.cjs --write; then
               git merge --abort
               echo "::error::Upstream has an unknown fork conflict. Resolve the merge locally and rerun this workflow."
               exit 1
             fi
+          fi
+          git restore --source="$base_sha" --staged --worktree -- README.md
+          if git rev-parse --quiet --verify MERGE_HEAD > /dev/null; then
             git commit --no-edit
           fi
           node .github/scripts/apply-fork-overlay.cjs --check
