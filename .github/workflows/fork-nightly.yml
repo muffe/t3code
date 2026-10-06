@@ -228,15 +228,31 @@ jobs:
       - name: Apply fork branding
         run: node .github/scripts/apply-fork-branding.cjs
 
+      # Only the resource monitor needs Rust and the Spectre libraries.
+      - name: Cache resource monitor
+        id: resource_monitor_cache
+        uses: actions/cache@v6
+        with:
+          path: native/resource-monitor/target/x86_64-pc-windows-msvc/release/t3-resource-monitor.exe
+          key: resource-monitor-x86_64-pc-windows-msvc-${{ hashFiles('native/resource-monitor/Cargo.lock', 'native/resource-monitor/Cargo.toml', 'native/resource-monitor/src/**') }}
+
       - uses: dtolnay/rust-toolchain@stable
+        if: steps.resource_monitor_cache.outputs.cache-hit != 'true'
         with:
           targets: x86_64-pc-windows-msvc
 
       - name: Install Spectre-mitigated MSVC libraries
+        if: steps.resource_monitor_cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $installPath = & $vswhere -products * -latest -property installationPath
+          $msvcToolset = Get-ChildItem (Join-Path $installPath "VC\Tools\MSVC") -Directory |
+            Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+          if ($msvcToolset -and (Test-Path (Join-Path $msvcToolset.FullName "lib\spectre\x64"))) {
+            Write-Host "Spectre libraries are already installed for the active MSVC toolset."
+            exit 0
+          }
           $setupExe = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
           $proc = Start-Process -FilePath $setupExe `
             -ArgumentList "modify", "--installPath", "`"$installPath`"", "--add", `
@@ -258,6 +274,7 @@ jobs:
 
       - name: Build installer and update metadata
         env:
+          T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR: ${{ steps.resource_monitor_cache.outputs.cache-hit == 'true' }}
           T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
           BUILD_VERSION: ${{ needs.wsl.outputs.version }}
         run: vp run dist:desktop:artifact --platform win --target nsis --arch x64 --build-version "$env:BUILD_VERSION" --wsl-runtime "$env:GITHUB_WORKSPACE/wsl-runtime/t3-$env:BUILD_VERSION-linux-x64.tar.gz" --verbose
