@@ -6,7 +6,8 @@ export function seaPlaywrightPlugin(): Rolldown.Plugin {
     name: "fork-sea-playwright",
     transform(source, id) {
       if (!id.replaceAll("\\", "/").endsWith("/preview/ServerBrowserContexts.ts")) return null;
-      const dynamicImport = 'import("playwright-core")';
+      // Type queries such as `typeof import(...)` must remain TypeScript types.
+      const dynamicImport = 'await import("playwright-core")';
       if (!source.includes(dynamicImport)) return null;
       return {
         code:
@@ -14,7 +15,7 @@ export function seaPlaywrightPlugin(): Rolldown.Plugin {
           "const forkRequirePlaywright = ForkNodeModule.createRequire(import.meta.url);\n" +
           source.replaceAll(
             dynamicImport,
-            'Promise.resolve().then(() => forkRequirePlaywright("playwright-core"))',
+            'await Promise.resolve().then(() => forkRequirePlaywright("playwright-core"))',
           ),
         map: null,
       };

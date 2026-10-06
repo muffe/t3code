@@ -131,6 +131,9 @@ jobs:
               - --filter=@t3tools/web...
               - --filter=@t3tools/scripts...
 
+      - name: Verify Playwright executable loading
+        run: vp test run scripts/lib/fork-sea-playwright.test.ts
+
       - name: Set nightly version
         id: version
         shell: bash
