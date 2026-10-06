@@ -540,6 +540,26 @@ test("temporary fix retirement requires both the exact fork delta and an upstrea
   );
 });
 
+test("catalog selector fix retires only after upstream handles version-qualified targets", () => {
+  const fix = temporaryFixes.find((fix) => fix.id === "catalog-version-qualified-overrides");
+  assert.ok(fix);
+  const base = git(repoRoot, "show", "e5a2e7ed4:scripts/lib/resolve-catalog.ts");
+  const ours = fix.apply(base);
+  const upstream = `// upstream changes\n${ours}`;
+  assert.equal(resolveForkConflict(fix.path, base, ours, upstream), upstream);
+  assert.throws(() => resolveForkConflict(fix.path, base, ours, base), /retirement check/);
+  assert.throws(
+    () => resolveForkConflict(fix.path, base, `${ours}// unrelated fork edit\n`, upstream),
+    /outside the temporary fix/,
+  );
+  assert.equal(fix.appliesTo(ours), false);
+  assert.equal(fix.verifyUpstream(base), false);
+  assert.equal(
+    fix.verifyUpstream(ours.replace('targetName.indexOf("@", 1)', 'targetName.indexOf("@")')),
+    false,
+  );
+});
+
 test("retiring a temporary fix preserves a permanent overlay in the same file", () => {
   const relativePath = "apps/desktop/src/preload.ts";
   const base = `import * as IpcChannels from "./ipc/channels.ts";
