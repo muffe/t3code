@@ -568,8 +568,20 @@ const retiredAttentionFixtureEdits = {
 
 for (const relativePath of Object.keys(integrationRules)) {
   test(`--write preserves upstream edits in ${relativePath}`, (t) => {
-    const base = git(repoRoot, "show", `${upstreamFixture}:${relativePath}`);
-    let ours = git(repoRoot, "show", `e8eddd930:${relativePath}`);
+    const serverBuild = relativePath === "apps/server/vite.config.ts";
+    const fixture = serverBuild ? "953b84d1b" : upstreamFixture;
+    const base = git(repoRoot, "show", `${fixture}:${relativePath}`);
+    let ours = serverBuild
+      ? base
+          .replace(
+            'import baseConfig from "../../vite.config.ts";\n',
+            'import baseConfig from "../../vite.config.ts";\nimport { seaPlaywrightPlugin } from "../../scripts/lib/fork-sea-playwright.ts";\n',
+          )
+          .replace(
+            "    pack: {\n",
+            "    pack: {\n      plugins: packExecutable ? [seaPlaywrightPlugin()] : [],\n",
+          )
+      : git(repoRoot, "show", `e8eddd930:${relativePath}`);
     for (const edit of retiredAttentionFixtureEdits[relativePath] ?? []) {
       assert.equal(ours.split(edit).length, 2);
       ours = ours.replace(edit, "");
