@@ -1,4 +1,4 @@
-# T3 Code · muffe fork
+# T3 Code
 
 **T3 Code with provider limits below the chat, folder-drop project setup, and desktop nightlies that follow upstream.**
 
