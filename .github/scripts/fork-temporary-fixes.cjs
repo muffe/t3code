@@ -9,6 +9,11 @@ const qualifiedCatalogLookup = `      const targetName = name.split(">").at(-1) 
       const packageName = versionIndex === -1 ? targetName : targetName.slice(0, versionIndex);
       const lookupKey = catalogKey.length > 0 ? catalogKey : packageName;
 `;
+const upstreamQualifiedCatalogLookup = `      const selector = name.split(">").at(-1) ?? name;
+      const versionIndex = selector.indexOf("@", 1);
+      const packageName = versionIndex === -1 ? selector : selector.slice(0, versionIndex);
+      const lookupKey = catalogKey.length > 0 ? catalogKey : packageName;
+`;
 
 module.exports = [
   {
@@ -16,10 +21,11 @@ module.exports = [
     path: "scripts/lib/resolve-catalog.ts",
     appliesTo: (source) => source.split(catalogLookup).length === 2,
     apply: (source) => source.replace(catalogLookup, qualifiedCatalogLookup),
-    // Retire only for this known normalization, including preservation of scoped names.
+    // Retire only for these verified normalizations, including preservation of scoped names.
     // A different upstream implementation still needs a manual merge and behavior check.
     verifyUpstream: (source) =>
-      !source.includes(catalogLookup) && source.includes(qualifiedCatalogLookup),
+      !source.includes(catalogLookup) &&
+      (source.includes(qualifiedCatalogLookup) || source.includes(upstreamQualifiedCatalogLookup)),
   },
   {
     id: "msgpackr-build-placeholder",

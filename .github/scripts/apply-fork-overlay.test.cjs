@@ -673,6 +673,35 @@ test("catalog selector fix retires only after upstream handles version-qualified
   );
 });
 
+test("catalog selector fix accepts upstream's equivalent package-name normalization", () => {
+  const fix = temporaryFixes.find((fix) => fix.id === "catalog-version-qualified-overrides");
+  const base = git(repoRoot, "show", "e5a2e7ed4:scripts/lib/resolve-catalog.ts");
+  const ours = fix.apply(base);
+  const upstream = base.replace(
+    '      const lookupKey = catalogKey.length > 0 ? catalogKey : (name.split(">").at(-1) ?? name);\n',
+    `      const selector = name.split(">").at(-1) ?? name;
+      const versionIndex = selector.indexOf("@", 1);
+      const packageName = versionIndex === -1 ? selector : selector.slice(0, versionIndex);
+      const lookupKey = catalogKey.length > 0 ? catalogKey : packageName;
+`,
+  );
+  assert.equal(resolveForkConflict(fix.path, base, ours, upstream), upstream);
+  assert.throws(
+    () =>
+      resolveForkConflict(
+        fix.path,
+        base,
+        ours,
+        upstream.replace('selector.indexOf("@", 1)', 'selector.indexOf("@")'),
+      ),
+    /retirement check/,
+  );
+  assert.throws(
+    () => resolveForkConflict(fix.path, base, `${ours}// unrelated fork edit\n`, upstream),
+    /outside the temporary fix/,
+  );
+});
+
 test("retiring a temporary fix preserves a permanent overlay in the same file", () => {
   const relativePath = "apps/desktop/src/preload.ts";
   const base = `import * as IpcChannels from "./ipc/channels.ts";
