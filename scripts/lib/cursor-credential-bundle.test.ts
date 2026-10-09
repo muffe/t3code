@@ -16,7 +16,7 @@ it("bundles the Cursor credential reader without file-backed ESM imports", async
       config: false,
       entry: [
         NodeURL.fileURLToPath(
-          new URL("../../apps/server/src/provider/cursorCredentialStore.ts", import.meta.url),
+          new URL("../../packages/provider-cursor/src/server/keychainToken.ts", import.meta.url),
         ),
       ],
       outDir: directory,
@@ -28,10 +28,7 @@ it("bundles the Cursor credential reader without file-backed ESM imports", async
       },
       logLevel: "silent",
     });
-    const bundle = await NodeFSP.readFile(
-      NodePath.join(directory, "cursorCredentialStore.mjs"),
-      "utf8",
-    );
+    const bundle = await NodeFSP.readFile(NodePath.join(directory, "keychainToken.mjs"), "utf8");
     assert.deepStrictEqual(findEsmImportsOfExternalPackages(bundle), []);
   } finally {
     await NodeFSP.rm(directory, { recursive: true, force: true });

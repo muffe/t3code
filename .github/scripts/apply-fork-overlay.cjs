@@ -6,8 +6,6 @@ const path = require("node:path");
 const SETTINGS_SEARCH_PATH = "apps/web/src/components/settings/settingsSearch.ts";
 const CHAT_VIEW_PATH = "apps/web/src/components/ChatView.tsx";
 const NO_PROJECTS_HERO_PATH = "apps/web/src/components/NoProjectsHero.tsx";
-const DESKTOP_PRELOAD_PATH = "apps/desktop/src/preload.ts";
-const IPC_CONTRACT_PATH = "packages/contracts/src/ipc.ts";
 const integrationRules = require("./fork-overlay-rules.cjs");
 const temporaryFixes = require("./fork-temporary-fixes.cjs");
 // Fork policy and CI wiring are maintained directly instead of as source overlays.
@@ -18,8 +16,6 @@ const OVERLAY_PATHS = [
   SETTINGS_SEARCH_PATH,
   CHAT_VIEW_PATH,
   NO_PROJECTS_HERO_PATH,
-  DESKTOP_PRELOAD_PATH,
-  IPC_CONTRACT_PATH,
   ...Object.keys(integrationRules),
 ];
 
@@ -106,42 +102,6 @@ function applyNoProjectsHeroOverlay(source) {
   );
 }
 
-function applyDesktopPreloadOverlay(source) {
-  const withImport = insertBefore(
-    source,
-    'import * as IpcChannels from "./ipc/channels.ts";\n',
-    'import { forkDesktopBridge } from "./fork/preloadBridge.ts";\n',
-    "desktop IPC imports",
-  );
-  return insertBefore(
-    withImport,
-    "  pasteAsText:",
-    "  ...forkDesktopBridge,\n",
-    "desktop paste bridge",
-  );
-}
-
-function applyIpcContractOverlay(source) {
-  const withImport = insertBefore(
-    source,
-    "import type {\n  DesktopAppActivationRequest,",
-    'import type { ForkDesktopBridge } from "./forkDesktop.ts";\n',
-    "desktop activation imports",
-  );
-  const withExport = insertBefore(
-    withImport,
-    "export interface ContextMenuItem<T extends string = string> {",
-    'export * from "./forkDesktop.ts";\n\n',
-    "context menu contract",
-  );
-  return replaceOnce(
-    withExport,
-    "export interface DesktopBridge {",
-    "export interface DesktopBridge extends ForkDesktopBridge {",
-    "desktop bridge contract",
-  );
-}
-
 function applyForkOverlay(path, source) {
   if (Object.hasOwn(integrationRules, path)) {
     for (const { kind, anchor, text } of integrationRules[path]) {
@@ -153,8 +113,6 @@ function applyForkOverlay(path, source) {
   if (path === SETTINGS_SEARCH_PATH) return applySettingsSearchOverlay(source);
   if (path === CHAT_VIEW_PATH) return applyChatViewOverlay(source);
   if (path === NO_PROJECTS_HERO_PATH) return applyNoProjectsHeroOverlay(source);
-  if (path === DESKTOP_PRELOAD_PATH) return applyDesktopPreloadOverlay(source);
-  if (path === IPC_CONTRACT_PATH) return applyIpcContractOverlay(source);
   throw new Error(`Cannot apply fork overlay: unsupported path ${path}.`);
 }
 

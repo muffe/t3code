@@ -14,12 +14,12 @@ Most of the app comes from upstream. The fork keeps its additions small and cont
 
 ## What is different?
 
-| Area             | Original T3 Code                   | This fork                                                                                                                                    |
-| ---------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Provider limits  | Available in the Limits view.      | Remaining percentages and reset times also appear below the chat, refreshed while it is visible.                                             |
-| Adding projects  | Use the existing Add project flow. | Drop a folder onto the desktop sidebar or empty project screen to add or reopen a project and open a thread.                                 |
-| Desktop releases | Official builds and update feeds.  | Own nightlies for **Windows x64** and **macOS Apple Silicon**, with an update feed pointing to `muffe/t3code`.                               |
-| Upstream updates | Developed in `pingdotgg/t3code`.   | A scheduled workflow checks upstream three times daily and publishes a new nightly when the source changes and both platform builds succeed. |
+| Area             | Original T3 Code                         | This fork                                                                                                                                    |
+| ---------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Provider limits  | Limits view and `/usage-limits` in chat. | Remaining percentages and reset times also appear below the chat, refreshed while it is visible.                                             |
+| Adding projects  | Use the existing Add project flow.       | Drop a folder onto the desktop sidebar or empty project screen to add or reopen a project and open a thread.                                 |
+| Desktop releases | Official builds and update feeds.        | Own nightlies for **Windows x64** and **macOS Apple Silicon**, with an update feed pointing to `muffe/t3code`.                               |
+| Upstream updates | Developed in `pingdotgg/t3code`.         | A scheduled workflow checks upstream three times daily and publishes a new nightly when the source changes and both platform builds succeed. |
 
 The limits bar uses the provider data already available to T3 Code; availability depends on the provider and account. It is part of this fork's web and desktop UI. Folder drops require the desktop app and a folder path accessible to its primary environment. For a project on another machine, use Add project with that environment's path.
 

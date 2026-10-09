@@ -10,12 +10,19 @@ function droppedEntry(item: DataTransferItem): FileSystemEntry | null {
   }
 }
 
-export function isSingleDirectoryDrop(dataTransfer: DirectoryDropTransfer): boolean {
+/** Hover can inspect item metadata, but directory entries are readable only on drop. */
+export function isSingleFileDrag(dataTransfer: DirectoryDropTransfer): boolean {
   if (!Array.from(dataTransfer.types).includes("Files") || dataTransfer.items.length !== 1) {
     return false;
   }
   const item = dataTransfer.items[0];
-  return item?.kind === "file" && droppedEntry(item)?.isDirectory === true;
+  return item?.kind === "file";
+}
+
+export function isSingleDirectoryDrop(dataTransfer: DirectoryDropTransfer): boolean {
+  return (
+    isSingleFileDrag(dataTransfer) && droppedEntry(dataTransfer.items[0]!)?.isDirectory === true
+  );
 }
 
 export function getSingleDroppedDirectoryFile(dataTransfer: DirectoryDropTransfer): File | null {

@@ -13,7 +13,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import {
   getSingleDroppedDirectoryFile,
-  isSingleDirectoryDrop,
+  isSingleFileDrag,
   parseDesktopActivationPlatform,
 } from "./DesktopProjectFolderDrop.logic";
 
@@ -48,7 +48,7 @@ export function useDesktopProjectFolderDrop(): DesktopProjectFolderDropState {
 
   const accepts = useCallback(
     (dataTransfer: DataTransfer) =>
-      typeof bridge?.getPathForDroppedFile === "function" && isSingleDirectoryDrop(dataTransfer),
+      typeof bridge?.getPathForFile === "function" && isSingleFileDrag(dataTransfer),
     [bridge],
   );
 
@@ -82,14 +82,19 @@ export function useDesktopProjectFolderDrop(): DesktopProjectFolderDropState {
 
   const onDropCapture: DragEventHandler<HTMLElement> = useCallback(
     (event) => {
+      setActive(false);
       const file = getSingleDroppedDirectoryFile(event.dataTransfer);
-      if (file === null || typeof bridge?.getPathForDroppedFile !== "function") return;
+      if (file === null || typeof bridge?.getPathForFile !== "function") return;
       event.preventDefault();
       event.stopPropagation();
-      setActive(false);
       if (addingRef.current) return;
 
-      const workspaceRoot = bridge.getPathForDroppedFile(file);
+      let workspaceRoot: string | null;
+      try {
+        workspaceRoot = bridge.getPathForFile(file) || null;
+      } catch {
+        workspaceRoot = null;
+      }
       const platform = parseDesktopActivationPlatform(bridge.getClientPlatform?.() ?? null);
       if (workspaceRoot === null || platform === null) {
         showFolderDropError(new Error("T3 Code could not read that folder’s desktop path."));
@@ -189,7 +194,7 @@ export function DesktopProjectFolderDropOverlay({
       className={cn(
         "pointer-events-none absolute inset-2 z-50 flex items-center justify-center rounded-lg border border-dashed",
         surface === "sidebar"
-          ? "border-sidebar-primary/45 bg-sidebar/95 text-sidebar-foreground"
+          ? "border-primary/45 bg-sidebar/95 text-sidebar-foreground"
           : "border-primary/45 bg-background/95 text-foreground",
       )}
       aria-hidden="true"

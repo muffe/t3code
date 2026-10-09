@@ -79,95 +79,6 @@ export function ChatView() {
   );
 });
 
-test("reapplies the fork desktop preload bridge", () => {
-  const upstream = `import { contextBridge, ipcRenderer } from "electron";
-
-import * as IpcChannels from "./ipc/channels.ts";
-
-contextBridge.exposeInMainWorld("desktopBridge", {
-  probeRemoteEditors: () => ipcRenderer.invoke(IpcChannels.PROBE_REMOTE_EDITORS_CHANNEL),
-  pasteAsText: () => ipcRenderer.invoke(IpcChannels.PASTE_AS_TEXT_CHANNEL),
-});
-`;
-
-  assert.equal(
-    applyForkOverlay("apps/desktop/src/preload.ts", upstream),
-    `import { contextBridge, ipcRenderer } from "electron";
-
-import { forkDesktopBridge } from "./fork/preloadBridge.ts";
-import * as IpcChannels from "./ipc/channels.ts";
-
-contextBridge.exposeInMainWorld("desktopBridge", {
-  probeRemoteEditors: () => ipcRenderer.invoke(IpcChannels.PROBE_REMOTE_EDITORS_CHANNEL),
-  ...forkDesktopBridge,
-  pasteAsText: () => ipcRenderer.invoke(IpcChannels.PASTE_AS_TEXT_CHANNEL),
-});
-`,
-  );
-});
-
-test("reapplies the fork desktop bridge contract", () => {
-  const upstream = `import type {
-  SourceControlRepositoryInfo,
-} from "./sourceControl.ts";
-import type {
-  DesktopAppActivationRequest,
-} from "./desktopAppActivation.ts";
-
-export interface ContextMenuItem<T extends string = string> {
-  id: T;
-}
-
-export interface DesktopBridge {
-  openExternal: (url: string) => Promise<boolean>;
-}
-`;
-
-  assert.equal(
-    applyForkOverlay("packages/contracts/src/ipc.ts", upstream),
-    `import type {
-  SourceControlRepositoryInfo,
-} from "./sourceControl.ts";
-import type { ForkDesktopBridge } from "./forkDesktop.ts";
-import type {
-  DesktopAppActivationRequest,
-} from "./desktopAppActivation.ts";
-
-export * from "./forkDesktop.ts";
-
-export interface ContextMenuItem<T extends string = string> {
-  id: T;
-}
-
-export interface DesktopBridge extends ForkDesktopBridge {
-  openExternal: (url: string) => Promise<boolean>;
-}
-`,
-  );
-});
-
-test("desktop bridge export anchor stays unique beside its schema type", () => {
-  const upstream = `import type {
-  DesktopAppActivationRequest,
-} from "./desktopAppActivation.ts";
-
-export interface ContextMenuItem<T extends string = string> {
-  id: T;
-}
-export interface ContextMenuItemSchemaType {
-  id: string;
-}
-export interface DesktopBridge {
-  openExternal: (url: string) => Promise<boolean>;
-}
-`;
-
-  assert.match(
-    applyForkOverlay("packages/contracts/src/ipc.ts", upstream),
-    /export \* from "\.\/forkDesktop\.ts";\n\nexport interface ContextMenuItem</,
-  );
-});
-
 test("applying an overlay twice is a no-op", () => {
   const upstream = `import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
 
@@ -185,8 +96,8 @@ test("rejects unsupported conflicts and recognizable files with missing anchors"
     /unsupported path/,
   );
   assert.throws(
-    () => applyForkOverlay("apps/desktop/src/preload.ts", ""),
-    /missing or ambiguous desktop IPC imports/,
+    () => applyForkOverlay("apps/web/src/components/settings/settingsSearch.ts", ""),
+    /missing or ambiguous settings search import anchor/,
   );
 });
 
@@ -229,10 +140,6 @@ export const SETTINGS_SEARCH_ITEMS = [
   git(root, "config", "user.email", "fork-overlay@example.com");
   fs.writeFileSync(sourcePath, source);
   fs.writeFileSync(path.join(root, "shared.txt"), "upstream\n");
-  fs.writeFileSync(
-    path.join(root, "pnpm-workspace.yaml"),
-    "  msgpackr-extract: set this to true or false\n",
-  );
   fs.writeFileSync(path.join(root, "AGENTS.md"), "upstream policy\n");
   git(root, "add", ".");
   git(root, "commit", "-m", "upstream");
@@ -240,7 +147,6 @@ export const SETTINGS_SEARCH_ITEMS = [
 
   fs.writeFileSync(sourcePath, applyForkOverlay(relativePath, source));
   fs.writeFileSync(path.join(root, "fork-owned.txt"), "fork feature\n");
-  fs.writeFileSync(path.join(root, "pnpm-workspace.yaml"), "  msgpackr-extract: true\n");
   fs.writeFileSync(path.join(root, "AGENTS.md"), "fork policy\n");
   git(root, "add", ".");
   git(root, "commit", "-m", "declared fork changes");
@@ -467,41 +373,6 @@ export function NoProjectsHero() {
   assert.equal(git(root, "diff", "--cached", "--name-only"), `${relativePath}\n`);
 });
 
-test("--write retires the temporary msgpackr build fix when upstream removes it", (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "fork-overlay-msgpackr-"));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const relativePath = "pnpm-workspace.yaml";
-  const absolutePath = path.join(root, relativePath);
-  const source = (msgpackrLine) => `allowBuilds:
-  electron: true
-${msgpackrLine}  sharp: true
-`;
-  git(root, "init", "-b", "main");
-  git(root, "config", "user.name", "Fork Overlay Test");
-  git(root, "config", "user.email", "fork-overlay@example.com");
-  fs.writeFileSync(absolutePath, source("  msgpackr-extract: set this to true or false\n"));
-  git(root, "add", relativePath);
-  git(root, "commit", "-m", "base");
-  git(root, "checkout", "-b", "upstream");
-  fs.writeFileSync(absolutePath, source(""));
-  git(root, "commit", "-am", "remove placeholder");
-  git(root, "checkout", "main");
-  fs.writeFileSync(absolutePath, source("  msgpackr-extract: true\n"));
-  git(root, "commit", "-am", "fix placeholder");
-  const merge = spawnSync("git", ["merge", "upstream"], { cwd: root, encoding: "utf8" });
-  assert.equal(merge.status, 1);
-
-  const result = spawnSync(process.execPath, [scriptPath, "--write"], {
-    cwd: root,
-    encoding: "utf8",
-  });
-
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(fs.readFileSync(absolutePath, "utf8"), source(""));
-  assert.equal(git(root, "diff", "--name-only", "--diff-filter=U"), "");
-  assert.equal(git(root, "diff", "--cached", "--name-only"), `${relativePath}\n`);
-});
-
 test("--write refuses to discard fork changes outside the overlay", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "fork-overlay-guard-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -568,20 +439,8 @@ const retiredAttentionFixtureEdits = {
 
 for (const relativePath of Object.keys(integrationRules)) {
   test(`--write preserves upstream edits in ${relativePath}`, (t) => {
-    const serverBuild = relativePath === "apps/server/vite.config.ts";
-    const fixture = serverBuild ? "953b84d1b" : upstreamFixture;
-    const base = git(repoRoot, "show", `${fixture}:${relativePath}`);
-    let ours = serverBuild
-      ? base
-          .replace(
-            'import baseConfig from "../../vite.config.ts";\n',
-            'import baseConfig from "../../vite.config.ts";\nimport { seaPlaywrightPlugin } from "../../scripts/lib/fork-sea-playwright.ts";\n',
-          )
-          .replace(
-            "    pack: {\n",
-            "    pack: {\n      plugins: packExecutable ? [seaPlaywrightPlugin()] : [],\n",
-          )
-      : git(repoRoot, "show", `e8eddd930:${relativePath}`);
+    const base = git(repoRoot, "show", `${upstreamFixture}:${relativePath}`);
+    let ours = git(repoRoot, "show", `e8eddd930:${relativePath}`);
     for (const edit of retiredAttentionFixtureEdits[relativePath] ?? []) {
       assert.equal(ours.split(edit).length, 2);
       ours = ours.replace(edit, "");
@@ -638,92 +497,50 @@ for (const relativePath of Object.keys(integrationRules)) {
 }
 
 test("rejects ambiguous integration anchors", () => {
-  const source = 'import * as IpcChannels from "./ipc/channels.ts";\n';
+  const source = 'import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";\n';
   assert.throws(
-    () => applyForkOverlay("apps/desktop/src/preload.ts", source + source),
+    () => applyForkOverlay("apps/web/src/components/settings/settingsSearch.ts", source + source),
     /ambiguous/,
   );
 });
 
 test("temporary fix retirement requires both the exact fork delta and an upstream fix", () => {
-  const fix = temporaryFixes.find((fix) => fix.id === "msgpackr-build-placeholder");
-  const base = "allowBuilds:\n  msgpackr-extract: set this to true or false\n  electron: true\n";
+  const fix = {
+    id: "test-only-fix",
+    path: "shared.ts",
+    appliesTo: (source) => source.includes('const value = "broken";'),
+    apply: (source) => source.replace('const value = "broken";', 'const value = "fork-fix";'),
+    verifyUpstream: (source) => source.includes('const value = "upstream-fix";'),
+  };
+  const base = 'const value = "broken";\n';
   const ours = fix.apply(base);
-  const upstream = "allowBuilds:\n  electron: true\n  sharp: true\n";
-  assert.equal(resolveForkConflict(fix.path, base, ours, upstream), upstream);
-  for (const value of ["set this to true or false", "maybe", "false", "true"]) {
-    const notRetired = `allowBuilds:\n  msgpackr-extract: ${value}\n`;
-    assert.throws(() => resolveForkConflict(fix.path, base, ours, notRetired), /retirement check/);
+  const upstream = 'const value = "upstream-fix";\n';
+  temporaryFixes.push(fix);
+  try {
+    assert.equal(resolveForkConflict(fix.path, base, ours, upstream), upstream);
+    assert.throws(() => resolveForkConflict(fix.path, base, ours, base), /retirement check/);
+    assert.throws(
+      () => resolveForkConflict(fix.path, base, `${ours}// unrelated fork edit\n`, upstream),
+      /outside the temporary fix/,
+    );
+    assert.throws(
+      () => resolveForkConflict(fix.path, "unrecognized base", ours, upstream),
+      /unsupported path/,
+    );
+  } finally {
+    temporaryFixes.pop();
   }
-  assert.throws(
-    () => resolveForkConflict(fix.path, base, `${ours}extra: true\n`, upstream),
-    /outside the temporary fix/,
-  );
-  assert.throws(
-    () => resolveForkConflict(fix.path, "unrecognized base", ours, upstream),
-    /unsupported path/,
-  );
-});
-
-test("catalog selector fix retires only after upstream handles version-qualified targets", () => {
-  const fix = temporaryFixes.find((fix) => fix.id === "catalog-version-qualified-overrides");
-  assert.ok(fix);
-  const base = git(repoRoot, "show", "e5a2e7ed4:scripts/lib/resolve-catalog.ts");
-  const ours = fix.apply(base);
-  const upstream = `// upstream changes\n${ours}`;
-  assert.equal(resolveForkConflict(fix.path, base, ours, upstream), upstream);
-  assert.throws(() => resolveForkConflict(fix.path, base, ours, base), /retirement check/);
-  assert.throws(
-    () => resolveForkConflict(fix.path, base, `${ours}// unrelated fork edit\n`, upstream),
-    /outside the temporary fix/,
-  );
-  assert.equal(fix.appliesTo(ours), false);
-  assert.equal(fix.verifyUpstream(base), false);
-  assert.equal(
-    fix.verifyUpstream(ours.replace('targetName.indexOf("@", 1)', 'targetName.indexOf("@")')),
-    false,
-  );
-});
-
-test("catalog selector fix accepts upstream's equivalent package-name normalization", () => {
-  const fix = temporaryFixes.find((fix) => fix.id === "catalog-version-qualified-overrides");
-  const base = git(repoRoot, "show", "e5a2e7ed4:scripts/lib/resolve-catalog.ts");
-  const ours = fix.apply(base);
-  const upstream = base.replace(
-    '      const lookupKey = catalogKey.length > 0 ? catalogKey : (name.split(">").at(-1) ?? name);\n',
-    `      const selector = name.split(">").at(-1) ?? name;
-      const versionIndex = selector.indexOf("@", 1);
-      const packageName = versionIndex === -1 ? selector : selector.slice(0, versionIndex);
-      const lookupKey = catalogKey.length > 0 ? catalogKey : packageName;
-`,
-  );
-  assert.equal(resolveForkConflict(fix.path, base, ours, upstream), upstream);
-  assert.throws(
-    () =>
-      resolveForkConflict(
-        fix.path,
-        base,
-        ours,
-        upstream.replace('selector.indexOf("@", 1)', 'selector.indexOf("@")'),
-      ),
-    /retirement check/,
-  );
-  assert.throws(
-    () => resolveForkConflict(fix.path, base, `${ours}// unrelated fork edit\n`, upstream),
-    /outside the temporary fix/,
-  );
 });
 
 test("retiring a temporary fix preserves a permanent overlay in the same file", () => {
-  const relativePath = "apps/desktop/src/preload.ts";
-  const base = `import * as IpcChannels from "./ipc/channels.ts";
+  const relativePath = "apps/web/src/components/settings/settingsSearch.ts";
+  const base = `import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
 const temporaryValue = "broken";
-const bridge = {
-  pasteAsText: () => {},
-};
+export const SETTINGS_SEARCH_ITEMS = [
+] as const satisfies ReadonlyArray<SettingsSearchItem>;
 `;
   const fix = {
-    id: "test-only-preload-fix",
+    id: "test-only-settings-fix",
     path: relativePath,
     appliesTo: (source) => source.includes('temporaryValue = "broken"'),
     apply: (source) => source.replace('temporaryValue = "broken"', 'temporaryValue = "fork-fix"'),

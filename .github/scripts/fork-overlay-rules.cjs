@@ -1,17 +1,5 @@
 // Exact integration edits on upstream-owned files. Keep feature logic in fork modules.
 module.exports = {
-  "apps/server/vite.config.ts": [
-    {
-      kind: "after",
-      anchor: 'import baseConfig from "../../vite.config.ts";\n',
-      text: 'import { seaPlaywrightPlugin } from "../../scripts/lib/fork-sea-playwright.ts";\n',
-    },
-    {
-      kind: "after",
-      anchor: "    pack: {\n",
-      text: "      plugins: packExecutable ? [seaPlaywrightPlugin()] : [],\n",
-    },
-  ],
   "apps/web/src/components/AppSidebarLayout.tsx": [
     {
       kind: "after",
