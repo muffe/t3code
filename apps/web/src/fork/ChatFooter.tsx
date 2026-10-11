@@ -113,7 +113,7 @@ function ProviderUsageLimitsBar({
   return (
     <section
       aria-label="Provider usage limits"
-      className="pointer-events-auto mx-[1.375rem] mt-2 flex max-h-24 items-start gap-3 overflow-y-auto px-4 text-xs text-muted-foreground"
+      className="surface-glass pointer-events-auto mx-[1.375rem] mt-2 flex max-h-24 items-start gap-3 overflow-y-auto rounded-xl px-4 py-1 text-xs text-muted-foreground"
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {report.accounts.map((account) => {
