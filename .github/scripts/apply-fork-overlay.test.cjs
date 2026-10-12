@@ -532,6 +532,43 @@ test("temporary fix retirement requires both the exact fork delta and an upstrea
   }
 });
 
+test("obsolete markdown approval removal retires only after upstream removes the stale selector", () => {
+  const fix = temporaryFixes.find(
+    (candidate) => candidate.id === "obsolete-markdown-build-placeholder",
+  );
+  assert.ok(fix);
+  const selector =
+    "react-native-enriched-markdown@file:apps/mobile/deps/react-native-enriched-markdown-1.2.0-t3.9.tgz";
+  const base = `allowBuilds:
+  "react-native-enriched-markdown@file:apps/mobile/deps/react-native-enriched-markdown-1.2.0-t3.10.tgz": true
+  ${selector}: set this to true or false
+  sharp: true
+`;
+  const fixed = `allowBuilds:
+  "react-native-enriched-markdown@file:apps/mobile/deps/react-native-enriched-markdown-1.2.0-t3.10.tgz": true
+  sharp: true
+`;
+  assert.equal(fix.appliesTo(base), true);
+  assert.equal(fix.apply(base), fixed);
+  assert.equal(fix.appliesTo(fixed), false);
+  assert.equal(resolveForkConflict(fix.path, base, fixed, fixed), fixed);
+  assert.throws(() => resolveForkConflict(fix.path, base, fixed, base), /retirement check/);
+  assert.throws(
+    () =>
+      resolveForkConflict(
+        fix.path,
+        base,
+        fixed,
+        base.replace("set this to true or false", "unknown"),
+      ),
+    /retirement check/,
+  );
+  assert.throws(
+    () => resolveForkConflict(fix.path, base, `${fixed}extra: true\n`, fixed),
+    /outside the temporary fix/,
+  );
+});
+
 test("retiring a temporary fix preserves a permanent overlay in the same file", () => {
   const relativePath = "apps/web/src/components/settings/settingsSearch.ts";
   const base = `import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";

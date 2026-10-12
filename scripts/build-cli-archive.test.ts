@@ -7,7 +7,7 @@ import * as NodeChildProcess from "node:child_process";
 import { expect } from "vite-plus/test";
 import { it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 
 const repoRoot = NodeURL.fileURLToPath(new URL("..", import.meta.url));
 
@@ -17,7 +17,7 @@ it.effect(
   "stages an archive from the real workspace config and rejects invalid build approvals",
   (context) =>
     Effect.gen(function* () {
-      if ((yield* HostProcessPlatform) === "win32") return context.skip();
+      if ((yield* HostProcess.Platform) === "win32") return context.skip();
       yield* Effect.promise(async () => {
         const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-cli-archive-test-"));
         try {
