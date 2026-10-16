@@ -6,16 +6,18 @@ const path = require("node:path");
 const SETTINGS_SEARCH_PATH = "apps/web/src/components/settings/settingsSearch.ts";
 const CHAT_VIEW_PATH = "apps/web/src/components/ChatView.tsx";
 const NO_PROJECTS_HERO_PATH = "apps/web/src/components/NoProjectsHero.tsx";
+const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const integrationRules = require("./fork-overlay-rules.cjs");
 const temporaryFixes = require("./fork-temporary-fixes.cjs");
-// Fork policy and CI wiring are maintained directly instead of as source overlays.
-const FORK_POLICY_PATHS = new Set([".github/workflows/ci.yml", "AGENTS.md"]);
+// Fork policy is maintained directly instead of as a source overlay.
+const FORK_POLICY_PATHS = new Set(["AGENTS.md"]);
 // The fork README is kept in full, even when upstream edits merge cleanly.
 const FORK_README_PATH = "README.md";
 const OVERLAY_PATHS = [
   SETTINGS_SEARCH_PATH,
   CHAT_VIEW_PATH,
   NO_PROJECTS_HERO_PATH,
+  CI_WORKFLOW_PATH,
   ...Object.keys(integrationRules),
 ];
 
@@ -103,6 +105,22 @@ function applyNoProjectsHeroOverlay(source) {
 }
 
 function applyForkOverlay(path, source) {
+  if (path === CI_WORKFLOW_PATH) {
+    const stepName = source.includes("      - name: Test nightly release checks\n")
+      ? "Test nightly release checks"
+      : "Test release checks";
+    return replaceOnce(
+      source,
+      `      - name: ${stepName}\n        run: node --test .github/scripts/check-nightly-release.test.cjs\n`,
+      `      - name: Test fork automation scripts
+        run: |
+          node --test \\
+            .github/scripts/apply-fork-overlay.test.cjs \\
+            .github/scripts/check-nightly-release.test.cjs
+`,
+      "CI release checks step",
+    );
+  }
   if (Object.hasOwn(integrationRules, path)) {
     for (const { kind, anchor, text } of integrationRules[path]) {
       const apply = kind === "after" ? insertAfter : kind === "before" ? insertBefore : replaceOnce;

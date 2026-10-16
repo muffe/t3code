@@ -224,6 +224,82 @@ const nightlyMergeBlock = nightlyWorkflow
     '"$FORK_OVERLAY_NODE" "$FORK_OVERLAY_SCRIPT"',
   );
 
+for (const stepName of ["Test nightly release checks", "Test release checks"]) {
+  test(`nightly sync preserves upstream CI changes after renaming ${stepName}`, (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fork-ci-sync-"));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const relativePath = ".github/workflows/ci.yml";
+    const file = path.join(root, relativePath);
+    const base = `name: CI
+jobs:
+  test:
+    steps:
+      - name: ${stepName}
+        run: node --test .github/scripts/check-nightly-release.test.cjs
+`;
+    const ours = base.replace(
+      `      - name: ${stepName}\n        run: node --test .github/scripts/check-nightly-release.test.cjs`,
+      `      - name: Test fork automation scripts
+        run: |
+          node --test \\
+            .github/scripts/apply-fork-overlay.test.cjs \\
+            .github/scripts/check-nightly-release.test.cjs`,
+    );
+    const upstream = base
+      .replace(stepName, "Test release checks")
+      .replace("  test:\n", "  test:\n    timeout-minutes: 5\n");
+    assert.equal(applyForkOverlay(relativePath, ours), ours);
+    assert.throws(
+      () => resolveForkConflict(relativePath, base, `${ours}# extra fork edit\n`, upstream),
+      /outside the fork overlay/,
+    );
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    git(root, "init", "-b", "main");
+    git(root, "config", "user.name", "Fork Overlay Test");
+    git(root, "config", "user.email", "fork-overlay@example.com");
+    fs.writeFileSync(file, base);
+    fs.writeFileSync(path.join(root, "README.md"), "Fork README\n");
+    git(root, "add", ".");
+    git(root, "commit", "-m", "base");
+    git(root, "checkout", "-b", "upstream");
+    fs.writeFileSync(file, upstream);
+    git(root, "commit", "-am", "upstream CI changes");
+    const upstreamRef = git(root, "rev-parse", "HEAD").trim();
+    git(root, "checkout", "main");
+    fs.writeFileSync(file, ours);
+    git(root, "commit", "-am", "fork automation tests");
+    const result = spawnSync("bash", ["-c", `set -euo pipefail\n${nightlyMergeBlock}`], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        base_sha: git(root, "rev-parse", "HEAD").trim(),
+        upstream_sha: upstreamRef,
+        FORK_OVERLAY_NODE: process.execPath,
+        FORK_OVERLAY_SCRIPT: scriptPath,
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      git(root, "show", `HEAD:${relativePath}`),
+      ours.replace("  test:\n", "  test:\n    timeout-minutes: 5\n"),
+    );
+    assert.equal(git(root, "status", "--porcelain"), "");
+    const audit = () =>
+      spawnSync(process.execPath, [scriptPath, "--audit", upstreamRef], {
+        cwd: root,
+        encoding: "utf8",
+      });
+    const accepted = audit();
+    assert.equal(accepted.status, 0, accepted.stderr);
+    fs.appendFileSync(file, "# extra fork edit\n");
+    git(root, "commit", "-am", "unregistered CI change");
+    const rejected = audit();
+    assert.equal(rejected.status, 1);
+    assert.match(rejected.stderr, /unregistered fork changes/);
+  });
+}
+
 const baseReadme = `# T3 Code\n\n${"Shared documentation.\n".repeat(12)}\nOriginal install instructions.\n`;
 const forkReadme = baseReadme.replace("# T3 Code", "# T3 Code · personal fork");
 
