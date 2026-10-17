@@ -65,9 +65,14 @@ function applySettingsSearchOverlay(source) {
 }
 
 function applyChatViewOverlay(source) {
+  // Keep the old location when validating the fork side of a pending merge.
+  const legacyImport = 'import { usageLimitsBannerItem } from "./chat/ComposerUsageLimits";\n';
+  const importAnchor = source.includes(legacyImport)
+    ? legacyImport
+    : 'import { ComposerSurface } from "./chat/ComposerSurface";\n';
   const withImport = insertAfter(
     source,
-    'import { usageLimitsBannerItem } from "./chat/ComposerUsageLimits";\n',
+    importAnchor,
     'import { ForkChatFooter } from "../fork/ChatFooter";\n',
     "chat footer import anchor",
   );

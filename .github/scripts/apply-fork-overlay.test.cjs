@@ -79,6 +79,51 @@ export function ChatView() {
   );
 });
 
+test("resolves the chat footer conflict after upstream removes ComposerUsageLimits", () => {
+  const relativePath = "apps/web/src/components/ChatView.tsx";
+  const base = `import { usageLimitsBannerItem } from "./chat/ComposerUsageLimits";
+import { ComposerSurface } from "./chat/ComposerSurface";
+
+export function ChatView() {
+  return (
+                    <ComposerSurface.Shell>
+                      <ComposerSurface.Host />
+                    </ComposerSurface.Shell>
+  );
+}
+`;
+  const ours = applyForkOverlay(relativePath, base);
+  const upstream = base.replace(
+    'import { usageLimitsBannerItem } from "./chat/ComposerUsageLimits";\n',
+    'import { useUsageLimitsPanel } from "./chat/useUsageLimitsPanel";\n',
+  );
+  const expected = upstream
+    .replace(
+      'import { ComposerSurface } from "./chat/ComposerSurface";\n',
+      'import { ComposerSurface } from "./chat/ComposerSurface";\nimport { ForkChatFooter } from "../fork/ChatFooter";\n',
+    )
+    .replace(
+      "                    </ComposerSurface.Shell>\n",
+      `                    </ComposerSurface.Shell>
+                    <ForkChatFooter
+                      environmentId={environmentId}
+                      instanceId={activeProviderInstanceId}
+                    />
+`,
+    );
+
+  assert.equal(resolveForkConflict(relativePath, base, ours, upstream), expected);
+  assert.equal(applyForkOverlay(relativePath, expected), expected);
+  assert.throws(
+    () => resolveForkConflict(relativePath, base, `${ours}// extra fork edit\n`, upstream),
+    /outside the fork overlay/,
+  );
+  assert.throws(
+    () => applyForkOverlay(relativePath, upstream.replaceAll("ComposerSurface", "ChangedSurface")),
+    /missing or ambiguous chat footer import anchor/,
+  );
+});
+
 test("applying an overlay twice is a no-op", () => {
   const upstream = `import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
 
