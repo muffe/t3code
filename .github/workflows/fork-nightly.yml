@@ -134,8 +134,13 @@ jobs:
       - name: Verify CLI archive staging and Playwright executable loading
         run: vp test run scripts/build-cli-archive.test.ts scripts/lib/playwright-executable-bundle.test.ts
 
+      # The fork footer test renders React, so it runs in the web package's headless Chromium project.
+      - name: Install Chromium for web browser tests
+        run: node apps/web/node_modules/playwright/cli.js install --with-deps --only-shell chromium
+
       - name: Verify fork chat footer
-        run: vp test run apps/web/src/fork/ChatFooter.test.tsx apps/web/src/fork/ChatFooter.live.test.tsx
+        working-directory: apps/web
+        run: vp test run src/fork/ChatFooter.browser.test.tsx
 
       - name: Set nightly version
         id: version

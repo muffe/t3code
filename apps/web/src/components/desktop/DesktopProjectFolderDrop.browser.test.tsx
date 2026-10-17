@@ -1,45 +1,47 @@
 import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { act, useLayoutEffect, type DragEvent } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 
 const state = vi.hoisted(() => ({
-  createProject: vi.fn(async () => ({ _tag: "Success" })),
+  createProject: vi.fn(async (_command: { input: { projectId: ProjectId } }) => ({
+    _tag: "Success",
+  })),
   openThread: vi.fn(async () => ({ threadId: ThreadId.make("dropped-thread") })),
   toast: vi.fn(),
   getPathForFile: vi.fn(() => "/workspace/project"),
 }));
 
-vi.mock("../../hooks/useHandleNewThread", () => ({
-  useNewThreadHandler: () => state.openThread,
+vi.mock(import("../../hooks/useHandleNewThread"), async (original) => ({
+  ...(await original()),
+  useNewThreadHandler: (() => state.openThread) as never,
 }));
-vi.mock("../../state/use-atom-command", () => ({
-  useAtomCommand: () => state.createProject,
+vi.mock(import("../../state/use-atom-command"), async (original) => ({
+  ...(await original()),
+  useAtomCommand: (() => state.createProject) as never,
 }));
-vi.mock("../../state/projects", () => ({ projectEnvironment: { create: null } }));
-vi.mock("../../state/entities", () => ({
+vi.mock(import("../../state/entities"), async (original) => ({
+  ...(await original()),
   readProjects: () => [],
-  waitForProject: async () => undefined,
+  waitForProject: (async () => undefined) as never,
 }));
-vi.mock("../../state/environments", () => ({
-  usePrimaryEnvironment: () => ({
+vi.mock(import("../../state/environments"), async (original) => ({
+  ...(await original()),
+  usePrimaryEnvironment: (() => ({
     environmentId: EnvironmentId.make("folder-drop"),
     connection: { phase: "connected" },
     serverConfig: { environment: { platform: { os: "linux" } } },
-  }),
+  })) as never,
 }));
-vi.mock("../../lib/utils", () => ({
-  cn: (...classes: string[]) => classes.join(" "),
-  newProjectId: () => ProjectId.make("dropped-project"),
-}));
-vi.mock("../ui/toast", () => ({
-  stackedThreadToast: (input: unknown) => input,
-  toastManager: { add: state.toast },
+vi.mock(import("../ui/toast"), async (original) => ({
+  ...(await original()),
+  stackedThreadToast: ((input: unknown) => input) as never,
+  toastManager: { add: state.toast } as never,
 }));
 
 import { useDesktopProjectFolderDrop } from "./DesktopProjectFolderDrop";
 
-let renderer: ReactTestRenderer | undefined;
+let root: Root;
 let drop: ReturnType<typeof useDesktopProjectFolderDrop>;
 
 function DropTarget() {
@@ -70,20 +72,16 @@ beforeEach(async () => {
   vi.clearAllMocks();
   state.getPathForFile.mockReset().mockReturnValue("/workspace/project");
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.stubGlobal("window", {
-    desktopBridge: {
-      getPathForFile: state.getPathForFile,
-      getClientPlatform: () => "linux",
-    },
+  vi.stubGlobal("desktopBridge", {
+    getPathForFile: state.getPathForFile,
+    getClientPlatform: () => "linux",
   });
-  await act(() => {
-    renderer = create(<DropTarget />);
-  });
+  root = createRoot(document.createElement("div"));
+  await act(async () => root.render(<DropTarget />));
 });
 
 afterEach(async () => {
-  await act(() => renderer?.unmount());
-  renderer = undefined;
+  act(() => root.unmount());
   vi.unstubAllGlobals();
 });
 
@@ -106,7 +104,7 @@ it("accepts protected file drags, then imports the directory using its desktop p
   });
   expect(state.openThread).toHaveBeenCalledWith({
     environmentId: EnvironmentId.make("folder-drop"),
-    projectId: ProjectId.make("dropped-project"),
+    projectId: state.createProject.mock.calls[0]![0].input.projectId,
   });
   expect(drop.active).toBe(false);
   expect(drop.adding).toBe(false);
