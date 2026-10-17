@@ -134,6 +134,9 @@ jobs:
       - name: Verify CLI archive staging and Playwright executable loading
         run: vp test run scripts/build-cli-archive.test.ts scripts/lib/playwright-executable-bundle.test.ts
 
+      - name: Verify fork chat footer
+        run: vp test run apps/web/src/fork/ChatFooter.test.tsx apps/web/src/fork/ChatFooter.live.test.tsx
+
       - name: Set nightly version
         id: version
         shell: bash

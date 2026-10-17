@@ -1,9 +1,9 @@
 import type {
   EnvironmentId,
   ProviderInstanceId,
-  ServerProvider,
   UsageLimitSourceSnapshots,
 } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
 import {
   collectProviderUsageLimits,
   formatResetsIn,
@@ -11,13 +11,13 @@ import {
   remainingPercent,
 } from "@t3tools/shared/usageLimits";
 import { refreshUsageLimits } from "@t3tools/client-runtime/state/usage";
-import { useEffect, useEffectEvent, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { RedactedSensitiveText } from "../components/settings/RedactedSensitiveText";
 import { barColor } from "../components/usage/UsageLimits";
 import { useEnvironmentSettings } from "../hooks/useSettings";
 import { useEnvironment } from "../state/environments";
-import { serverEnvironment } from "../state/server";
+import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "../state/server";
 import { useAtomCommand } from "../state/use-atom-command";
 
 const COUNTDOWN_TICK_MS = 60_000;
@@ -49,7 +49,6 @@ export function ForkChatFooter({
       key={`${environmentId}:${instanceId}`}
       environmentId={environmentId}
       instanceId={instanceId}
-      providers={serverConfig.providers}
       sources={serverConfig.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES}
     />
   );
@@ -59,14 +58,14 @@ export function ForkChatFooter({
 function ProviderUsageLimitsBar({
   environmentId,
   instanceId,
-  providers,
   sources,
 }: {
   readonly environmentId: EnvironmentId;
   readonly instanceId: ProviderInstanceId;
-  readonly providers: readonly ServerProvider[];
   readonly sources: UsageLimitSourceSnapshots;
 }) {
+  const providers =
+    useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_SERVER_PROVIDERS;
   const [now, setNow] = useState(() => Date.now());
   const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
     reportFailure: false,
@@ -100,10 +99,7 @@ function ProviderUsageLimitsBar({
       }
     };
   }, []);
-  const report = useMemo(
-    () => collectProviderUsageLimits(instanceId, providers, sources, now),
-    [instanceId, providers, sources, now],
-  );
+  const report = collectProviderUsageLimits(instanceId, providers, sources, now);
   if (!report || (report.accounts.length === 0 && report.notices.length === 0)) return null;
   const displayNow = report.accounts.reduce(
     (latest, account) => Math.max(latest, Date.parse(account.limits.checkedAt) || now),

@@ -1,5 +1,9 @@
 import type { ReactElement } from "react";
-import { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProviderInstanceId,
+  type UsageLimitSourceSnapshots,
+} from "@t3tools/contracts";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { reactHookHarness as hooks } from "../test/reactHookHarness";
@@ -10,8 +14,7 @@ const state = vi.hoisted(() => ({
   environment: null as {
     readonly connection: { readonly phase: string };
     readonly serverConfig: {
-      readonly providers: readonly [];
-      readonly usageLimitSources: Record<string, never>;
+      readonly usageLimitSources: UsageLimitSourceSnapshots;
     } | null;
   } | null,
 }));
@@ -52,7 +55,7 @@ describe("ForkChatFooter", () => {
     state.environmentId = null;
     state.environment = {
       connection: { phase: "connected" },
-      serverConfig: { providers: [], usageLimitSources: {} },
+      serverConfig: { usageLimitSources: [] },
     };
   });
 
@@ -70,7 +73,7 @@ describe("ForkChatFooter", () => {
   it("stays hidden while the environment is disconnected", () => {
     state.environment = {
       connection: { phase: "reconnecting" },
-      serverConfig: { providers: [], usageLimitSources: {} },
+      serverConfig: { usageLimitSources: [] },
     };
 
     expect(renderBar()).toBeNull();
