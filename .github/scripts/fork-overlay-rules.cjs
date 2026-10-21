@@ -26,7 +26,7 @@ module.exports = {
   "apps/web/src/components/settings/SettingsPanels.tsx": [
     {
       kind: "after",
-      anchor: 'import { PanelAnimationsPreview } from "./PanelAnimationsPreview";\n',
+      anchor: 'import { searchableSetting } from "./settingsSearch";\n',
       text: 'import * as ForkSettings from "../../fork/Settings";\n',
     },
     {

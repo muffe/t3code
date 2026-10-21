@@ -111,17 +111,22 @@ function applyNoProjectsHeroOverlay(source) {
 
 function applyForkOverlay(path, source) {
   if (path === CI_WORKFLOW_PATH) {
-    const stepName = source.includes("      - name: Test nightly release checks\n")
-      ? "Test nightly release checks"
-      : "Test release checks";
+    // Keep whatever test files upstream lists so its CI additions survive the rename.
+    const step = source.match(
+      /^ {6}- name: Test (?:nightly )?release checks\n {8}run: node --test (.+)\n/m,
+    );
+    if (!step) {
+      if (source.includes("      - name: Test fork automation scripts\n")) return source;
+      throw new Error("Cannot apply fork overlay: missing CI release checks step.");
+    }
+    const files = [".github/scripts/apply-fork-overlay.test.cjs", ...step[1].split(" ")];
     return replaceOnce(
       source,
-      `      - name: ${stepName}\n        run: node --test .github/scripts/check-nightly-release.test.cjs\n`,
+      step[0],
       `      - name: Test fork automation scripts
         run: |
           node --test \\
-            .github/scripts/apply-fork-overlay.test.cjs \\
-            .github/scripts/check-nightly-release.test.cjs
+${files.map((file) => `            ${file}`).join(" \\\n")}
 `,
       "CI release checks step",
     );

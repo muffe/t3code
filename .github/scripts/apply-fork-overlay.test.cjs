@@ -269,6 +269,22 @@ const nightlyMergeBlock = nightlyWorkflow
     '"$FORK_OVERLAY_NODE" "$FORK_OVERLAY_SCRIPT"',
   );
 
+test("CI overlay keeps test files upstream adds to the release checks step", () => {
+  const upstream = `      - name: Test release checks
+        run: node --test .github/scripts/check-nightly-release.test.cjs .github/scripts/vercel-deployment-output.test.cjs
+`;
+  assert.equal(
+    applyForkOverlay(".github/workflows/ci.yml", upstream),
+    `      - name: Test fork automation scripts
+        run: |
+          node --test \\
+            .github/scripts/apply-fork-overlay.test.cjs \\
+            .github/scripts/check-nightly-release.test.cjs \\
+            .github/scripts/vercel-deployment-output.test.cjs
+`,
+  );
+});
+
 for (const stepName of ["Test nightly release checks", "Test release checks"]) {
   test(`nightly sync preserves upstream CI changes after renaming ${stepName}`, (t) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "fork-ci-sync-"));
@@ -543,18 +559,26 @@ const repoRoot = path.resolve(__dirname, "../..");
 const upstreamFixture = "a727d1d97690c9bb12cee5760e91cfd1aa7c017d";
 
 // Keep the historical fixture independent of the current rule definitions,
-// but remove the desktop attention integration retired in favor of upstream.
-const retiredAttentionFixtureEdits = {
+// but remove the desktop attention integration retired in favor of upstream
+// and follow integration anchors that upstream has since removed.
+const forkSettingsImport = 'import * as ForkSettings from "../../fork/Settings";\n';
+const settingsSearchImport = 'import { searchableSetting } from "./settingsSearch";\n';
+const fixtureEdits = {
   "apps/web/src/components/settings/SettingsPanels.tsx": [
-    "  const changedForkSettingLabels = ForkSettings.getChangedForkSettingLabels(settings);\n",
-    "      ...changedForkSettingLabels,\n",
-    "      changedForkSettingLabels,\n",
-    "      ...ForkSettings.FORK_SETTINGS_DEFAULTS,\n",
-    "      {isElectron ? <ForkSettings.ForkDesktopAttentionSettingsSection /> : null}\n\n",
+    [
+      "  const changedForkSettingLabels = ForkSettings.getChangedForkSettingLabels(settings);\n",
+      "",
+    ],
+    ["      ...changedForkSettingLabels,\n", ""],
+    ["      changedForkSettingLabels,\n", ""],
+    ["      ...ForkSettings.FORK_SETTINGS_DEFAULTS,\n", ""],
+    ["      {isElectron ? <ForkSettings.ForkDesktopAttentionSettingsSection /> : null}\n\n", ""],
+    [forkSettingsImport, ""],
+    [settingsSearchImport, settingsSearchImport + forkSettingsImport],
   ],
   "packages/contracts/src/settings.ts": [
-    "  ...ForkSettings.FORK_DESKTOP_SETTINGS_FIELDS,\n",
-    "  ...ForkSettings.FORK_DESKTOP_SETTINGS_PATCH_FIELDS,\n",
+    ["  ...ForkSettings.FORK_DESKTOP_SETTINGS_FIELDS,\n", ""],
+    ["  ...ForkSettings.FORK_DESKTOP_SETTINGS_PATCH_FIELDS,\n", ""],
   ],
 };
 
@@ -562,9 +586,9 @@ for (const relativePath of Object.keys(integrationRules)) {
   test(`--write preserves upstream edits in ${relativePath}`, (t) => {
     const base = git(repoRoot, "show", `${upstreamFixture}:${relativePath}`);
     let ours = git(repoRoot, "show", `e8eddd930:${relativePath}`);
-    for (const edit of retiredAttentionFixtureEdits[relativePath] ?? []) {
-      assert.equal(ours.split(edit).length, 2);
-      ours = ours.replace(edit, "");
+    for (const [from, to] of fixtureEdits[relativePath] ?? []) {
+      assert.equal(ours.split(from).length, 2);
+      ours = ours.replace(from, to);
     }
     assert.equal(applyForkOverlay(relativePath, base), ours);
     assert.equal(applyForkOverlay(relativePath, ours), ours);
