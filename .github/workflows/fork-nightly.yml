@@ -132,7 +132,7 @@ jobs:
               - --filter=@t3tools/scripts...
 
       - name: Verify CLI archive staging and Playwright executable loading
-        run: vp test run scripts/build-cli-archive.test.ts scripts/lib/playwright-executable-bundle.test.ts
+        run: vp test run --config .github/scripts/fork-cli-tests.config.ts scripts/build-cli-archive.test.ts scripts/lib/playwright-executable-bundle.test.ts
 
       # The fork footer test renders React, so it runs in the web package's headless Chromium project.
       # Cache the pinned browser and skip apt unless shared libraries are missing, like ci.yml.
