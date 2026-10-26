@@ -6,9 +6,9 @@ import {
 } from "@t3tools/contracts";
 import { RegistryContext } from "@effect/atom-react";
 import { Atom, AtomRegistry } from "effect/reactivity";
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
+import { expect, it, vi } from "vite-plus/test";
+
+import { act, fakeTimers, render } from "../../test/render";
 
 const state = vi.hoisted(() => ({
   enabled: true,
@@ -73,64 +73,62 @@ vi.mock(import("../state/use-atom-command"), async (original) => ({
 
 import { ForkChatFooter } from "./ChatFooter";
 
+import "~/index.css";
+
 const environmentId = EnvironmentId.make("footer-live-test");
 const instanceId = ProviderInstanceId.make("codex");
 const providerAtoms = Atom.family((_id: EnvironmentId) =>
   Atom.make<ReadonlyArray<ServerProvider> | null>(null),
 );
-let root: Root;
-let container: HTMLDivElement;
-let registry: AtomRegistry.AtomRegistry;
-const originalEnvironment = state.environment;
+const connectedEnvironment = state.environment;
 
-beforeEach(() => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-09-11T12:00:00Z"));
-  state.enabled = true;
+function setup({ enabled = true, environment = connectedEnvironment } = {}) {
+  state.enabled = enabled;
+  state.environment = environment;
   state.refreshProviders.mockClear();
-  state.environment = originalEnvironment;
-  registry = AtomRegistry.make();
+  const timers = fakeTimers();
+  vi.setSystemTime(new Date("2026-09-11T12:00:00Z"));
+  const registry = AtomRegistry.make();
   registry.set(providerAtoms(environmentId), [provider]);
-  container = document.createElement("div");
-  root = createRoot(container);
-});
-
-afterEach(() => {
-  act(() => root.unmount());
-  registry.dispose();
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
-});
-
-function footer(
-  targetEnvironmentId = environmentId,
-  targetInstanceId: ProviderInstanceId | null = instanceId,
-) {
-  return (
+  const footer = (
+    targetEnvironmentId = environmentId,
+    targetInstanceId: ProviderInstanceId | null = instanceId,
+  ) => (
     <RegistryContext.Provider value={registry}>
       <ForkChatFooter environmentId={targetEnvironmentId} instanceId={targetInstanceId} />
     </RegistryContext.Provider>
   );
+  return {
+    registry,
+    footer,
+    [Symbol.dispose]() {
+      registry.dispose();
+      timers[Symbol.dispose]();
+    },
+  };
 }
+
+// The footer reads no route, so these mount without the test router.
+const mount = (ui: React.ReactNode) => render(ui, { router: false });
 
 // Refreshes are throttled per environment for the whole session, so this runs first.
 it("refreshes the chat limits while open and advances the reset countdown", async () => {
-  await act(async () => root.render(footer()));
-  expect(container.textContent).toContain("74% left");
-  expect(container.textContent).toContain("in 20m");
+  using test = setup();
+  await using screen = await mount(test.footer());
+  expect(screen.container.textContent).toContain("74% left");
+  expect(screen.container.textContent).toContain("in 20m");
   expect(state.refreshProviders).toHaveBeenCalledTimes(1);
 
   await act(() => vi.advanceTimersByTimeAsync(60_000));
-  expect(container.textContent).toContain("in 19m");
+  expect(screen.container.textContent).toContain("in 19m");
   expect(state.refreshProviders).toHaveBeenCalledTimes(1);
 
   await act(() => vi.advanceTimersByTimeAsync(4 * 60_000));
-  expect(container.textContent).toContain("in 15m");
+  expect(screen.container.textContent).toContain("in 15m");
   expect(state.refreshProviders).toHaveBeenCalledTimes(2);
 
-  act(() =>
-    registry.set(providerAtoms(environmentId), [
+  await act(() =>
+    test.registry.set(providerAtoms(environmentId), [
       {
         ...provider,
         usageLimits: {
@@ -141,24 +139,26 @@ it("refreshes the chat limits while open and advances the reset countdown", asyn
       },
     ]),
   );
-  expect(container.textContent).toContain("70% left");
+  expect(screen.container.textContent).toContain("70% left");
 });
 
-it("waits for provider snapshots and updates when they arrive", () => {
-  registry.set(providerAtoms(environmentId), null);
-  act(() => root.render(footer()));
-  expect(container.childElementCount).toBe(0);
+it("waits for provider snapshots and updates when they arrive", async () => {
+  using test = setup();
+  test.registry.set(providerAtoms(environmentId), null);
+  await using screen = await mount(test.footer());
+  expect(screen.container.childElementCount).toBe(0);
 
-  act(() => registry.set(providerAtoms(environmentId), [provider]));
-  expect(container.textContent).toContain("74% left");
+  await act(() => test.registry.set(providerAtoms(environmentId), [provider]));
+  expect(screen.container.textContent).toContain("74% left");
 
-  act(() => registry.set(providerAtoms(environmentId), []));
-  expect(container.childElementCount).toBe(0);
+  await act(() => test.registry.set(providerAtoms(environmentId), []));
+  expect(screen.container.childElementCount).toBe(0);
 });
 
-it("shows the destination environment's usage when switching environments", () => {
+it("shows the destination environment's usage when switching environments", async () => {
+  using test = setup();
   const remoteEnvironmentId = EnvironmentId.make("remote-footer-test");
-  registry.set(providerAtoms(remoteEnvironmentId), [
+  test.registry.set(providerAtoms(remoteEnvironmentId), [
     {
       ...provider,
       usageLimits: {
@@ -167,29 +167,53 @@ it("shows the destination environment's usage when switching environments", () =
       },
     },
   ]);
-  act(() => root.render(footer()));
-  expect(container.textContent).toContain("74% left");
+  await using screen = await mount(test.footer());
+  expect(screen.container.textContent).toContain("74% left");
 
-  act(() => root.render(footer(remoteEnvironmentId)));
-  expect(container.textContent).toContain("20% left");
+  await screen.rerender(test.footer(remoteEnvironmentId));
+  expect(screen.container.textContent).toContain("20% left");
 
-  act(() => root.render(footer()));
-  expect(container.textContent).toContain("74% left");
+  await screen.rerender(test.footer());
+  expect(screen.container.textContent).toContain("74% left");
 });
 
-it("stays hidden when the setting is disabled", () => {
-  state.enabled = false;
-  act(() => root.render(footer()));
-  expect(container.childElementCount).toBe(0);
+it("drops detail instead of wrapping when the row gets narrow", async () => {
+  using test = setup();
+  await using screen = await mount(<div style={{ width: 800 }}>{test.footer()}</div>);
+  const frame = screen.container.firstElementChild as HTMLElement;
+  const row = screen.container.querySelector<HTMLElement>("[class*='group/usage']")!;
+  const content = row.firstElementChild!;
+  expect(row).not.toHaveAttribute("data-no-bar");
+
+  frame.style.width = "200px";
+  await vi.waitFor(() => expect(row).toHaveAttribute("data-no-left"));
+  expect(row).toHaveAttribute("data-no-bar");
+  expect(row).not.toHaveAttribute("data-no-reset");
+  expect(content.getBoundingClientRect().width).toBeLessThanOrEqual(
+    row.getBoundingClientRect().width,
+  );
+
+  frame.style.width = "800px";
+  await vi.waitFor(() => expect(row).not.toHaveAttribute("data-no-bar"));
+  expect(row).not.toHaveAttribute("data-no-left");
 });
 
-it("stays hidden while the environment is disconnected", () => {
-  state.environment = { ...originalEnvironment, connection: { phase: "reconnecting" } };
-  act(() => root.render(footer()));
-  expect(container.childElementCount).toBe(0);
+it("stays hidden when the setting is disabled", async () => {
+  using test = setup({ enabled: false });
+  await using screen = await mount(test.footer());
+  expect(screen.container.childElementCount).toBe(0);
 });
 
-it("stays hidden until the selected provider is known", () => {
-  act(() => root.render(footer(environmentId, null)));
-  expect(container.childElementCount).toBe(0);
+it("stays hidden while the environment is disconnected", async () => {
+  using test = setup({
+    environment: { ...connectedEnvironment, connection: { phase: "reconnecting" } },
+  });
+  await using screen = await mount(test.footer());
+  expect(screen.container.childElementCount).toBe(0);
+});
+
+it("stays hidden until the selected provider is known", async () => {
+  using test = setup();
+  await using screen = await mount(test.footer(environmentId, null));
+  expect(screen.container.childElementCount).toBe(0);
 });
