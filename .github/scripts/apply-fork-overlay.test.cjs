@@ -677,6 +677,23 @@ test("temporary fix retirement requires both the exact fork delta and an upstrea
   }
 });
 
+test("sidebar click fix retires only after upstream ends a pending press as a release", () => {
+  const fix = temporaryFixes.find((fix) => fix.id === "sidebar-pending-press-click");
+  assert.ok(fix);
+  const base = git(repoRoot, "show", "6a3a460b0:apps/web/src/components/Sidebar.pointer.ts");
+  const ours = fix.apply(base);
+  const upstream = `// upstream changes\n${ours}`;
+  assert.notEqual(ours, base);
+  assert.equal(resolveForkConflict(fix.path, base, ours, upstream), upstream);
+  assert.throws(() => resolveForkConflict(fix.path, base, ours, base), /retirement check/);
+  assert.throws(
+    () => resolveForkConflict(fix.path, base, `${ours}// unrelated fork edit\n`, upstream),
+    /outside the temporary fix/,
+  );
+  assert.equal(fix.appliesTo(ours), false);
+  assert.equal(fix.verifyUpstream(base), false);
+});
+
 test("retiring a temporary fix preserves a permanent overlay in the same file", () => {
   const relativePath = "apps/web/src/components/settings/settingsSearch.ts";
   const base = `import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
