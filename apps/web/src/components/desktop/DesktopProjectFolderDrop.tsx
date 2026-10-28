@@ -1,11 +1,14 @@
+import {
+  findProjectByPath,
+  inferProjectTitleFromPath,
+} from "@t3tools/client-runtime/state/projects";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { FolderPlusIcon } from "lucide-react";
-import { useCallback, useRef, useState, type DragEventHandler, type HTMLAttributes } from "react";
+import { useRef, useState, type DragEventHandler, type HTMLAttributes } from "react";
 
 import { handleDesktopAppActivationRequest } from "../../desktopAppActivation";
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { cn, newProjectId } from "../../lib/utils";
-import { findProjectByPath, inferProjectTitleFromPath } from "../../lib/projectPaths";
 import { readProjects, waitForProject } from "../../state/entities";
 import { usePrimaryEnvironment } from "../../state/environments";
 import { projectEnvironment } from "../../state/projects";
@@ -46,126 +49,112 @@ export function useDesktopProjectFolderDrop(): DesktopProjectFolderDropState {
   const addingRef = useRef(false);
   const bridge = window.desktopBridge;
 
-  const accepts = useCallback(
-    (dataTransfer: DataTransfer) =>
-      typeof bridge?.getPathForFile === "function" && isSingleFileDrag(dataTransfer),
-    [bridge],
-  );
+  const accepts = (dataTransfer: DataTransfer) =>
+    typeof bridge?.getPathForFile === "function" && isSingleFileDrag(dataTransfer);
 
-  const onDragEnterCapture: DragEventHandler<HTMLElement> = useCallback(
-    (event) => {
-      if (!accepts(event.dataTransfer)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setActive(true);
-    },
-    [accepts],
-  );
+  const onDragEnterCapture: DragEventHandler<HTMLElement> = (event) => {
+    if (!accepts(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setActive(true);
+  };
 
-  const onDragOverCapture: DragEventHandler<HTMLElement> = useCallback(
-    (event) => {
-      if (!accepts(event.dataTransfer)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      event.dataTransfer.dropEffect = "copy";
-      setActive(true);
-    },
-    [accepts],
-  );
+  const onDragOverCapture: DragEventHandler<HTMLElement> = (event) => {
+    if (!accepts(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+    setActive(true);
+  };
 
-  const onDragLeaveCapture: DragEventHandler<HTMLElement> = useCallback((event) => {
+  const onDragLeaveCapture: DragEventHandler<HTMLElement> = (event) => {
     if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) {
       return;
     }
     setActive(false);
-  }, []);
+  };
 
-  const onDropCapture: DragEventHandler<HTMLElement> = useCallback(
-    (event) => {
-      setActive(false);
-      const file = getSingleDroppedDirectoryFile(event.dataTransfer);
-      if (file === null || typeof bridge?.getPathForFile !== "function") return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (addingRef.current) return;
+  const onDropCapture: DragEventHandler<HTMLElement> = (event) => {
+    setActive(false);
+    const file = getSingleDroppedDirectoryFile(event.dataTransfer);
+    if (file === null || typeof bridge?.getPathForFile !== "function") return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (addingRef.current) return;
 
-      let workspaceRoot: string | null;
-      try {
-        workspaceRoot = bridge.getPathForFile(file) || null;
-      } catch {
-        workspaceRoot = null;
-      }
-      const platform = parseDesktopActivationPlatform(bridge.getClientPlatform?.() ?? null);
-      if (workspaceRoot === null || platform === null) {
-        showFolderDropError(new Error("T3 Code could not read that folder’s desktop path."));
-        return;
-      }
+    let workspaceRoot: string | null;
+    try {
+      workspaceRoot = bridge.getPathForFile(file) || null;
+    } catch {
+      workspaceRoot = null;
+    }
+    const platform = parseDesktopActivationPlatform(bridge.getClientPlatform?.() ?? null);
+    if (workspaceRoot === null || platform === null) {
+      showFolderDropError(new Error("T3 Code could not read that folder’s desktop path."));
+      return;
+    }
 
-      addingRef.current = true;
-      setAdding(true);
-      void handleDesktopAppActivationRequest(
-        {
-          version: 1,
-          requestId: `folder-drop-${Date.now()}`,
-          type: "open-workspace",
-          workspaceRoot,
-          platform,
+    addingRef.current = true;
+    setAdding(true);
+    void handleDesktopAppActivationRequest(
+      {
+        version: 1,
+        requestId: `folder-drop-${Date.now()}`,
+        type: "open-workspace",
+        workspaceRoot,
+        platform,
+      },
+      {
+        getTarget: () => {
+          if (
+            primaryEnvironment?.connection.phase !== "connected" ||
+            primaryEnvironment.serverConfig === null
+          ) {
+            return null;
+          }
+          return {
+            environmentId: primaryEnvironment.environmentId,
+            platform: primaryEnvironment.serverConfig.environment.platform.os,
+          };
         },
-        {
-          getTarget: () => {
-            if (
-              primaryEnvironment?.connection.phase !== "connected" ||
-              primaryEnvironment.serverConfig === null
-            ) {
-              return null;
-            }
-            return {
-              environmentId: primaryEnvironment.environmentId,
-              platform: primaryEnvironment.serverConfig.environment.platform.os,
-            };
-          },
-          findProject: (environmentId, path) =>
-            findProjectByPath(
-              readProjects().filter((project) => project.environmentId === environmentId),
-              path,
-            ) ?? null,
-          createProject: async (environmentId, path) => {
-            const projectId = newProjectId();
-            const result = await createProject({
-              environmentId,
-              input: {
-                projectId,
-                title: inferProjectTitleFromPath(path),
-                workspaceRoot: path,
-                createWorkspaceRootIfMissing: false,
-                defaultModelSelection: null,
-              },
-            });
-            if (result._tag === "Failure") {
-              const error = squashAtomCommandFailure(result);
-              throw error instanceof Error
-                ? error
-                : new Error("T3 Code could not add the project.");
-            }
-            return projectId;
-          },
-          waitForProject: async (projectRef) => {
-            await waitForProject(projectRef);
-          },
-          openThread,
+        findProject: (environmentId, path) =>
+          findProjectByPath(
+            readProjects().filter((project) => project.environmentId === environmentId),
+            path,
+          ) ?? null,
+        createProject: async (environmentId, path) => {
+          const projectId = newProjectId();
+          const result = await createProject({
+            environmentId,
+            input: {
+              projectId,
+              title: inferProjectTitleFromPath(path),
+              workspaceRoot: path,
+              createWorkspaceRootIfMissing: false,
+              defaultModelSelection: null,
+            },
+          });
+          if (result._tag === "Failure") {
+            const error = squashAtomCommandFailure(result);
+            throw error instanceof Error ? error : new Error("T3 Code could not add the project.");
+          }
+          return projectId;
         },
-      )
-        .then((response) => {
-          if (!response.ok) showFolderDropError(new Error(response.message));
-        })
-        .catch(showFolderDropError)
-        .finally(() => {
-          addingRef.current = false;
-          setAdding(false);
-        });
-    },
-    [bridge, createProject, openThread, primaryEnvironment],
-  );
+        waitForProject: async (projectRef) => {
+          await waitForProject(projectRef);
+        },
+        openThread,
+      },
+    )
+      .then((response) => {
+        if (!response.ok) showFolderDropError(new Error(response.message));
+      })
+      .catch(showFolderDropError)
+      .finally(() => {
+        addingRef.current = false;
+        setAdding(false);
+      });
+  };
 
   return {
     active,
